@@ -8,6 +8,7 @@ from tqdm import tqdm
 import time
 import datetime
 from constants import *
+from tqdm_pbar import tqdmFA
 
 
 def initialise_vectors(steps: int, r0: float, v0: float) -> tuple:
@@ -59,10 +60,10 @@ def verlet_method(steps: int, dt: float, r0: float, v0: float) -> tuple:
 
 
 def plot_orbit(
-    r0: float = 3.844e8,                      # (m) initial Moon-Earth distance
-    v0: float = 1022,                         # (m/s) initial Moon orbital speed
-    time_step_mins: float = 120,                     # (s) time step (default 120 mins)
-    time_periods: float = 1.3,                   # no. of time periods (lunar orbits)
+    r0: float = 3.844e8,                # initial Moon-Earth distance (m)
+    v0: float = 1022,                   # initial Moon orbital speed (m/s)
+    time_step_mins: float = 120,        # time step (default 120 mins) (s)
+    time_periods: float = 1.3,          # no. of time periods (lunar orbits)
     euler: bool = False,
     verlet: bool = True,
     init_moon: bool = False,
@@ -119,11 +120,137 @@ def plot_orbit(
     return r, v
 
 
+def animate(
+    r0: float = 3.844e8,
+    v0: float = 1022,
+    time_step_mins: int = 120,
+    time_periods: float = 1.3,
+    trail_length_pct: float = 0.1,
+    frames_per_second: int = 60,
+    bit_rate: int = 15_000,
+    figure_size: tuple = (10, 10),
+    figure_title: str = "Moon Orbit Around Earth",
+    earth_markersize: int = 40,
+    moon_markersize: int = 11,
+    earth_colour: str = "tab:blue",
+    moon_colour: str = "tab:grey",
+    moon_orbit_colour: str = "tab:grey",
+    add_axis_limits: bool = True,
+    max_axis_extent_pct: float = 1.1,
+    show_legend: bool = True,
+) -> None:
+    interval = int(1000 / frames_per_second)
+
+    # --- SIMULATE ORBIT --- #
+    r, v = plot_orbit(
+        r0=r0,
+        v0=v0,
+        time_step_mins=time_step_mins,
+        time_periods=time_periods,
+        figure_size=figure_size,
+        figure_title=figure_title,
+        earth_markersize=earth_markersize,
+        moon_markersize=moon_markersize,
+        earth_colour=earth_colour,
+        moon_colour=moon_colour,
+        moon_orbit_colour=moon_orbit_colour,
+        add_axis_limits=add_axis_limits,
+        max_axis_extent_pct=max_axis_extent_pct,
+        show_legend=show_legend
+    )
+
+    steps = r.shape[0]
+    trail_length = int(trail_length_pct * steps)
+    total_time = steps * (interval * 1e-3)
+
+    print(f"\n{steps:,} steps @ {frames_per_second} fps (~{interval * 1e-3:.3f} sec/frame)")
+    print(f"time step (dt): {time_step_mins:,.2f} mins")
+    print(f"animation duration: {total_time / 60:.2f} mins ({total_time:,.1f} sec)\n")
+    print("writing frames to file...\n")
+
+    # --- SETUP FIGURE --- #
+    fig, ax = plt.subplots(figsize=figure_size)
+    ax.grid(True, alpha=0.3)
+    ax.set_aspect("equal")
+    ax.set_title(figure_title)
+    ax.set_xlabel("x (m)")
+    ax.set_ylabel("y (m)")
+
+    ax.plot(0, 0, marker="o", markersize=earth_markersize, color=earth_colour)
+    moon_orbit, = ax.plot([], [], linestyle="-", lw=0.75, color=moon_orbit_colour, label="Moon Orbit")
+    moon_marker, = ax.plot([], [], marker="o", markersize=moon_markersize, color=moon_colour)
+
+    if add_axis_limits:
+        max_extent = max_axis_extent_pct * np.max(np.abs(r))
+        ax.set_xlim(-max_extent, max_extent)
+        ax.set_ylim(-max_extent, max_extent)
+    if show_legend:
+        ax.legend()
+
+    # --- PROGRESS BAR --- #
+    pbar = tqdmFA(total=steps)
+
+    # --- ANIMATION FUNCTIONS --- #
+    def init():
+        moon_orbit.set_data([], [])
+        moon_marker.set_data([], [])
+        return moon_orbit, moon_marker
+
+    def update(frame: int):
+        i0 = max(0, frame - trail_length)                   # index a no. of datapoints behind current frame
+        x, y = r[i0:frame + 1, 0], r[i0:frame + 1, 1]       # create a "trail" behind the orbiting body
+        moon_orbit.set_data(x, y)
+        moon_marker.set_data([x[-1]], [y[-1]])
+        pbar.update(1)
+        return moon_orbit, moon_marker
+
+    ani = FuncAnimation(
+        fig=fig,
+        func=update,
+        frames=range(steps),
+        init_func=init,
+        interval=interval,
+        repeat=False,
+        blit=True,
+    )
+
+    # --- SAVE ANIMATION --- #
+    file_name = (
+        f"2D_orbit_{frames_per_second}fps_"
+        f"{time_periods:.1f}T_{time_step_mins}mins_dt_"
+        f"{v0}ms-1_v0_{bit_rate}kbps.mp4"
+    )
+
+    writer = FFMpegWriter(
+        fps=frames_per_second,
+        bitrate=bit_rate,
+        metadata=dict(artist="anw"),
+    )
+
+    ani.save(filename=file_name, writer=writer)
+
+    # --- REPORT --- #
+    elapsed = int(pbar.format_dict["elapsed"])
+    t = datetime.timedelta(seconds=elapsed)
+    print(f"\n\ntotal elapsed time: {t}")
+
+    avg_iter_per_sec = steps / t.total_seconds()
+    if 1 / avg_iter_per_sec < 1:
+        avg_rate = f"{1 / avg_iter_per_sec * 1e3:.0f} ms/frame"
+    else:
+        avg_rate = f"{1 / avg_iter_per_sec:.2f} sec/frame"
+    print(f"{avg_iter_per_sec:.1f} frames/sec processed ({avg_rate})")
+
+    return None
+
+
 if __name__ == "__main__":
+
+    # ----- PLOT ORBITS ----- #
 
     # Euler vs Verlet comparison:
     r, v = plot_orbit(
-        time_step_mins=10,                # dt = 10 minutes (time step)
+        time_step_mins=10,    # dt = 10 minutes (time step)
         time_periods=2,                   
         euler=True,
         verlet=True,
@@ -138,10 +265,10 @@ if __name__ == "__main__":
         show_legend=True,
     )
 
-    # Moon Orbit around Earth:
+    # # Moon Orbit around Earth:
     r, v = plot_orbit(
         time_step_mins=60,
-        time_periods=1,                   # no. of time periods (lunar orbits)
+        time_periods=1,                 
         figure_size=(10, 10),
         earth_markersize=40,
         moon_markersize=11,
@@ -153,9 +280,9 @@ if __name__ == "__main__":
         show_legend=True,
     )
 
-    # Higher eccentricity elliptical orbit:
+    # # Higher eccentricity elliptical orbit:
     r, v = plot_orbit(
-        v0=1200,                            # faster initial orbital velocity
+        v0=1200,    # faster initial orbital velocity
         time_step_mins=240,
         time_periods=4.75,
         figure_size=(12, 12),
@@ -163,8 +290,46 @@ if __name__ == "__main__":
         earth_markersize=40,
         moon_markersize=11,
         earth_colour="tab:blue",
-        moon_colour="tab:red",              # red "Moon"
+        moon_colour="tab:red",    # red "Moon"
         moon_orbit_colour="tab:red",
         add_axis_limits=False,
         show_legend=False,
     )
+
+    # ----- ANIMATE ORBITAL MOTION ----- #
+
+    # Moon Orbit around Earth:
+    animate(
+        time_step_mins=120,
+        time_periods=1.1,
+        figure_size=(10, 10),
+        figure_title="Moon Orbit Around Earth",
+        earth_markersize=40,
+        moon_markersize=11,
+        earth_colour="tab:blue",
+        moon_colour="tab:grey",
+        moon_orbit_colour="tab:grey",
+        add_axis_limits=True,
+        max_axis_extent_pct=1.1,    # axes 10% larger than the maximum orbit radius
+        show_legend=True,
+        bit_rate=20_000,
+    )
+
+    # Higher eccentricity elliptical orbit:
+    animate(
+        v0=1275,                            # faster initial orbital velocity for the Moon
+        time_step_mins=240,
+        time_periods=6,
+        figure_size=(12, 12),
+        figure_title="Elliptical Orbit",
+        earth_markersize=40,
+        moon_markersize=11,
+        earth_colour="tab:blue",
+        moon_colour="tab:red",
+        moon_orbit_colour="tab:red",
+        add_axis_limits=True,
+        show_legend=False,
+        bit_rate=20_000,
+    )
+
+    
