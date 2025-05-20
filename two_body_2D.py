@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 plt.rcParams["font.size"] = 9
 plt.rcParams["font.family"] = "monospace"
@@ -60,10 +61,10 @@ def verlet_method(steps: int, dt: float, r0: float, v0: float) -> tuple:
 
 
 def plot_orbit(
-    r0: float = 3.844e8,                # initial Moon-Earth distance (m)
-    v0: float = 1022,                   # initial Moon orbital speed (m/s)
-    time_step_mins: float = 120,        # time step (default 120 mins) (s)
-    time_periods: float = 1.3,          # no. of time periods (lunar orbits)
+    r0: float = D_EARTH_MOON,                   # average Earth-Moon distance (m)
+    v0: float = V_MOON,                         # orbital speed of Moon (m/s)
+    time_step_mins: float = 120,                     
+    time_periods: float = 1.3,                  
     euler: bool = False,
     verlet: bool = True,
     init_moon: bool = False,
@@ -78,6 +79,7 @@ def plot_orbit(
     y_axis_limits: tuple = None,
     max_axis_extent_pct: float = 1.1,
     show_legend: bool = True,
+    to_scale: bool = False
 ) -> tuple:
 
     T = 27.3 * 24 * 3600  # Orbital period of the Moon (s)
@@ -87,27 +89,34 @@ def plot_orbit(
 
     # --- SETUP FIGURE --- #
     fig, ax = plt.subplots(figsize=figure_size)
-    ax.grid(True, alpha=0.25)
+    ax.grid(True, alpha=0.15)
     ax.set_aspect("equal")
     ax.set_title(figure_title)
     ax.set_xlabel("x (m)")
     ax.set_ylabel("y (m)")
 
     # --- SIMULATE TRAJECTORY --- #
+    line_width = 0.5 if to_scale else 0.75  # smaller orbit trail linewidth for smaller (accurate sized) model
     if euler:
         r, v = euler_method(steps, dt, r0, v0)
         x, y = r[:, 0], r[:, 1]
-        ax.plot(x, y, linestyle="--", linewidth=0.75, color="tab:red", label="Moon Orbit (Euler)")
+        ax.plot(x, y, linestyle="--", linewidth=line_width, color="tab:red", label="Moon Orbit (Euler)")
     if verlet:
         r, v = verlet_method(steps, dt, r0, v0)
         x, y = r[:, 0], r[:, 1]
-        ax.plot(x, y, linestyle="-", linewidth=0.75, color=moon_orbit_colour, label="Moon Orbit (Verlet)")
+        ax.plot(x, y, linestyle="-", linewidth=line_width, color=moon_orbit_colour, label="Moon Orbit (Verlet)")
 
     # --- ADD MARKERS --- #
-    ax.plot(0, 0, marker="o", markersize=earth_markersize, color=earth_colour)  # Earth
-    if init_moon:
-        ax.plot(r0, 0, marker="o", markersize=moon_markersize, color=moon_colour, alpha=0.5)  # Initial Moon
-    ax.plot(x[-1], y[-1], marker="o", markersize=moon_markersize, color=moon_colour)  # Final Moon
+    if to_scale:
+        earth = Circle((0, 0), radius=R_EARTH, color=earth_colour, zorder=10)
+        ax.add_patch(earth)
+        moon_final = Circle((x[-1], y[-1]), radius=R_MOON, color=moon_colour, zorder=10)
+        ax.add_patch(moon_final)
+    else:
+        ax.plot(0, 0, marker="o", markersize=earth_markersize, color=earth_colour)  # Earth
+        if init_moon:
+            ax.plot(r0, 0, marker="o", markersize=moon_markersize, color=moon_colour, alpha=0.5)  # Initial Moon
+        ax.plot(x[-1], y[-1], marker="o", markersize=moon_markersize, color=moon_colour)  # Final Moon
 
     # --- AXIS LIMITS & LEGEND --- #
     # independent overrides (if only one set of limits is provided):
@@ -148,8 +157,9 @@ def animate(
     y_axis_limits: tuple = None,
     max_axis_extent_pct: float = 1.1,
     show_legend: bool = True,
+    to_scale: bool = False
 ) -> None:
-    interval = int(1000 / frames_per_second)
+    interval = int(1000 / frames_per_second)    # time between frames (FuncAnimation input parameter in ms)
 
     # --- SIMULATE ORBIT --- #
     r, v = plot_orbit(
@@ -167,7 +177,8 @@ def animate(
         x_axis_limits=x_axis_limits,
         y_axis_limits=y_axis_limits,
         max_axis_extent_pct=max_axis_extent_pct,
-        show_legend=show_legend
+        show_legend=show_legend,
+        to_scale=to_scale
     )
 
     steps = r.shape[0]
@@ -177,7 +188,7 @@ def animate(
     print(f"\n{steps:,} steps @ {frames_per_second} fps (~{interval * 1e-3:.3f} sec/frame)")
     print(f"time step (dt): {time_step_mins:,.2f} mins")
     print(f"animation duration: {total_time / 60:.2f} mins ({total_time:,.1f} sec)\n")
-    print("writing frames to file...\n")
+    print(f"writing {steps} frames to file...\n")
 
     # --- SETUP FIGURE --- #
     fig, ax = plt.subplots(figsize=figure_size)
@@ -187,9 +198,23 @@ def animate(
     ax.set_xlabel("x (m)")
     ax.set_ylabel("y (m)")
 
-    ax.plot(0, 0, marker="o", markersize=earth_markersize, color=earth_colour)
-    moon_orbit, = ax.plot([], [], linestyle="-", lw=0.75, color=moon_orbit_colour, label="Moon Orbit")
-    moon_marker, = ax.plot([], [], marker="o", markersize=moon_markersize, color=moon_colour)
+    # Earth marker (remains fixed):
+    if to_scale:
+        earth = Circle((0, 0), radius=R_EARTH, color=earth_colour, zorder=10)
+        ax.add_patch(earth)
+    else:
+        ax.plot(0, 0, marker="o", markersize=earth_markersize, color=earth_colour)
+
+    # initialise moon marker element:
+    line_width = 0.3 if to_scale else 0.75
+    if to_scale:
+        x0, y0 = r[0, 0], r[0, 1]
+        moon_marker = Circle((x0, y0), radius=R_MOON, color=moon_colour, zorder=10)
+        ax.add_patch(moon_marker)
+    else:
+        moon_marker, = ax.plot([], [], marker="o", markersize=moon_markersize, color=moon_colour)
+    # initialise moon orbit trail element:
+    moon_orbit, = ax.plot([], [], linestyle="-", lw=line_width, color=moon_orbit_colour, label="Moon Orbit")
 
     # axis limits: independent overrides (if only one set of limits is provided):
     x, y = r[:, 0], r[:, 1]
@@ -213,14 +238,21 @@ def animate(
     # --- ANIMATION FUNCTIONS --- #
     def init():
         moon_orbit.set_data([], [])
-        moon_marker.set_data([], [])
+        if not to_scale:
+            moon_marker.set_data([], [])
+        else:
+            moon_marker.center = (x0, y0)
         return moon_orbit, moon_marker
 
     def update(frame: int):
-        i0 = max(0, frame - trail_length)                   # index a no. of datapoints behind current frame
-        x, y = r[i0:frame + 1, 0], r[i0:frame + 1, 1]       # create a "trail" behind the orbiting body
+        i0 = max(0, frame - trail_length)
+        x, y = r[i0:frame + 1, 0], r[i0:frame + 1, 1]
         moon_orbit.set_data(x, y)
-        moon_marker.set_data([x[-1]], [y[-1]])
+        # update moon marker:
+        if to_scale:
+            moon_marker.center = (x[-1], y[-1])
+        else:
+            moon_marker.set_data([x[-1]], [y[-1]])
         pbar.update(1)
         return moon_orbit, moon_marker
 
@@ -266,7 +298,7 @@ def animate(
 
 if __name__ == "__main__":
 
-    # ----- PLOT ORBITS ----- #
+    # ----- EXAMPLES: PLOT ORBITS ----- #
 
     # Euler vs Verlet comparison:
     _, _ = plot_orbit(
@@ -299,7 +331,22 @@ if __name__ == "__main__":
         max_axis_extent_pct=1.1,
     )
 
-    # # Higher eccentricity elliptical orbit:
+    # Moon Orbit around Fixed Earth (TO SCALE):
+    _, _ = plot_orbit(
+        time_step_mins=60,
+        time_periods=1,                 
+        figure_size=(10, 10),
+        figure_title="Moon Orbit Around Fixed Earth (NOT TO SCALE)",
+        earth_markersize=40,
+        moon_markersize=11,
+        earth_colour="tab:blue",
+        moon_colour="tab:grey",
+        moon_orbit_colour="tab:grey",
+        max_axis_extent_pct=1.05,
+        to_scale=True
+    )
+
+    # Higher eccentricity elliptical orbit:
     r, v = plot_orbit(
         v0=1300,                            # faster initial orbital velocity for the Moon
         time_step_mins=300,
@@ -315,7 +362,7 @@ if __name__ == "__main__":
         show_legend=False,
     )
 
-    # ----- ANIMATE ORBITAL MOTION ----- #
+    # ----- EXAMPLES: ANIMATE ORBITAL MOTION ----- #
 
     # Moon Orbit around Earth:
     animate(
@@ -347,5 +394,3 @@ if __name__ == "__main__":
         trail_length_pct=0.05,              # test 5% orbit trail length
         show_legend=False,
     )
-
-    
