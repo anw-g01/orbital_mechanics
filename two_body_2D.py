@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
-from matplotlib.animation import FuncAnimation, FFMpegWriter
+from matplotlib.animation import FuncAnimation, FFMpegWriter, PillowWriter
 plt.rcParams["font.size"] = 9
 plt.rcParams["font.family"] = "monospace"
 plt.rcParams["lines.linewidth"] = 1
@@ -157,7 +157,8 @@ def animate(
     y_axis_limits: tuple = None,
     max_axis_extent_pct: float = 1.1,
     show_legend: bool = True,
-    to_scale: bool = False
+    to_scale: bool = False,
+    create_gif: bool = False
 ) -> None:
     interval = int(1000 / frames_per_second)    # time between frames (FuncAnimation input parameter in ms)
 
@@ -188,7 +189,8 @@ def animate(
     print(f"\n{steps:,} steps @ {frames_per_second} fps (~{interval * 1e-3:.3f} sec/frame)")
     print(f"time step (dt): {time_step_mins:,.2f} mins")
     print(f"animation duration: {total_time / 60:.2f} mins ({total_time:,.1f} sec)\n")
-    print(f"writing {steps} frames to file...\n")
+    file_ext = "gif" if create_gif else "mp4"
+    print(f"writing {steps} frames to {file_ext.upper()}...\n")
 
     # --- SETUP FIGURE --- #
     fig, ax = plt.subplots(figsize=figure_size)
@@ -270,16 +272,21 @@ def animate(
     file_name = (
         f"2D_orbit_{frames_per_second}fps_"
         f"{time_periods:.1f}T_{time_step_mins}mins_dt_"
-        f"{v0}ms-1_v0_{bit_rate}kbps.mp4"
+        f"{v0}ms-1_v0_{bit_rate}kbps.{file_ext}"
     )
 
-    writer = FFMpegWriter(
-        fps=frames_per_second,
-        bitrate=bit_rate,
-        metadata=dict(artist="anw"),
-    )
-
-    ani.save(filename=file_name, writer=writer)
+    if not create_gif:
+        writer = FFMpegWriter(
+            fps=frames_per_second,
+            bitrate=bit_rate,
+        )
+    else:
+        writer = PillowWriter(
+            fps=frames_per_second,
+        )
+    dpi = 100 if create_gif else 200
+    ani.save(filename=file_name, writer=writer, dpi=dpi)
+    pbar.close()    # close progress bar
 
     # --- REPORT --- #
     elapsed = int(pbar.format_dict["elapsed"])
