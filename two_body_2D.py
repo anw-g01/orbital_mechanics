@@ -74,7 +74,8 @@ def plot_orbit(
     earth_colour: str = "tab:blue",
     moon_colour: str = "tab:red",
     moon_orbit_colour: str = "tab:red",
-    add_axis_limits: bool = True,
+    x_axis_limits: tuple = None,
+    y_axis_limits: tuple = None,
     max_axis_extent_pct: float = 1.1,
     show_legend: bool = True,
 ) -> tuple:
@@ -109,10 +110,18 @@ def plot_orbit(
     ax.plot(x[-1], y[-1], marker="o", markersize=moon_markersize, color=moon_colour)  # Final Moon
 
     # --- AXIS LIMITS & LEGEND --- #
-    if add_axis_limits:
-        max_limit = max_axis_extent_pct * np.max(np.abs(r))
-        ax.set_xlim(-max_limit, max_limit)
-        ax.set_ylim(-max_limit, max_limit)
+    # independent overrides (if only one set of limits is provided):
+    if x_axis_limits:
+        ax.set_xlim(x_axis_limits)
+    else:
+        x_extent = max_axis_extent_pct * np.max(np.abs(x))
+        ax.set_xlim(-x_extent, x_extent)
+
+    if y_axis_limits:
+        ax.set_ylim(y_axis_limits)
+    else:
+        y_extent = max_axis_extent_pct * np.max(np.abs(y))
+        ax.set_ylim(-y_extent, y_extent)
     if show_legend:
         ax.legend()
     plt.show()
@@ -127,7 +136,7 @@ def animate(
     time_periods: float = 1.3,
     trail_length_pct: float = 0.1,
     frames_per_second: int = 60,
-    bit_rate: int = 15_000,
+    bit_rate: int = 20_000,
     figure_size: tuple = (10, 10),
     figure_title: str = "Moon Orbit Around Earth",
     earth_markersize: int = 40,
@@ -135,7 +144,8 @@ def animate(
     earth_colour: str = "tab:blue",
     moon_colour: str = "tab:grey",
     moon_orbit_colour: str = "tab:grey",
-    add_axis_limits: bool = True,
+    x_axis_limits: tuple = None,
+    y_axis_limits: tuple = None,
     max_axis_extent_pct: float = 1.1,
     show_legend: bool = True,
 ) -> None:
@@ -154,7 +164,8 @@ def animate(
         earth_colour=earth_colour,
         moon_colour=moon_colour,
         moon_orbit_colour=moon_orbit_colour,
-        add_axis_limits=add_axis_limits,
+        x_axis_limits=x_axis_limits,
+        y_axis_limits=y_axis_limits,
         max_axis_extent_pct=max_axis_extent_pct,
         show_legend=show_legend
     )
@@ -180,10 +191,19 @@ def animate(
     moon_orbit, = ax.plot([], [], linestyle="-", lw=0.75, color=moon_orbit_colour, label="Moon Orbit")
     moon_marker, = ax.plot([], [], marker="o", markersize=moon_markersize, color=moon_colour)
 
-    if add_axis_limits:
-        max_extent = max_axis_extent_pct * np.max(np.abs(r))
-        ax.set_xlim(-max_extent, max_extent)
-        ax.set_ylim(-max_extent, max_extent)
+    # axis limits: independent overrides (if only one set of limits is provided):
+    x, y = r[:, 0], r[:, 1]
+    if x_axis_limits:
+        ax.set_xlim(x_axis_limits)
+    else:
+        x_extent = max_axis_extent_pct * np.max(np.abs(x))
+        ax.set_xlim(-x_extent, x_extent)
+
+    if y_axis_limits:
+        ax.set_ylim(y_axis_limits)
+    else:
+        y_extent = max_axis_extent_pct * np.max(np.abs(y))
+        ax.set_ylim(-y_extent, y_extent)
     if show_legend:
         ax.legend()
 
@@ -249,50 +269,49 @@ if __name__ == "__main__":
     # ----- PLOT ORBITS ----- #
 
     # Euler vs Verlet comparison:
-    r, v = plot_orbit(
+    _, _ = plot_orbit(
         time_step_mins=10,    # dt = 10 minutes (time step)
         time_periods=2,                   
         euler=True,
         verlet=True,
         figure_size=(10, 10),
+        figure_title="Euler vs Verlet Orbit Paths",
         earth_markersize=40,
         moon_markersize=11,
         earth_colour="tab:blue",
         moon_colour="tab:grey",
         moon_orbit_colour="tab:green",
-        add_axis_limits=True,
         max_axis_extent_pct=1.1,
         show_legend=True,
     )
 
-    # # Moon Orbit around Earth:
-    r, v = plot_orbit(
+    # Moon Orbit around Fixed Earth (NOT TO SCALE):
+    _, _ = plot_orbit(
         time_step_mins=60,
         time_periods=1,                 
         figure_size=(10, 10),
+        figure_title="Moon Orbit Around Fixed Earth (NOT TO SCALE)",
         earth_markersize=40,
         moon_markersize=11,
         earth_colour="tab:blue",
         moon_colour="tab:grey",
         moon_orbit_colour="tab:grey",
-        add_axis_limits=True,
-        max_axis_extent_pct=1.5,
-        show_legend=True,
+        max_axis_extent_pct=1.1,
     )
 
     # # Higher eccentricity elliptical orbit:
     r, v = plot_orbit(
-        v0=1200,    # faster initial orbital velocity
-        time_step_mins=240,
-        time_periods=4.75,
+        v0=1300,                            # faster initial orbital velocity for the Moon
+        time_step_mins=300,
+        time_periods=5.5,
         figure_size=(12, 12),
         figure_title="Elliptical Orbit",
         earth_markersize=40,
         moon_markersize=11,
         earth_colour="tab:blue",
-        moon_colour="tab:red",    # red "Moon"
+        moon_colour="tab:red",
         moon_orbit_colour="tab:red",
-        add_axis_limits=False,
+        x_axis_limits=(-1.8e9, 5e8),
         show_legend=False,
     )
 
@@ -309,17 +328,14 @@ if __name__ == "__main__":
         earth_colour="tab:blue",
         moon_colour="tab:grey",
         moon_orbit_colour="tab:grey",
-        add_axis_limits=True,
         max_axis_extent_pct=1.1,    # axes 10% larger than the maximum orbit radius
-        show_legend=True,
-        bit_rate=20_000,
     )
 
     # Higher eccentricity elliptical orbit:
     animate(
-        v0=1275,                            # faster initial orbital velocity for the Moon
-        time_step_mins=240,
-        time_periods=6,
+        v0=1300,                            # faster initial orbital velocity for the Moon
+        time_step_mins=300,
+        time_periods=5.5,
         figure_size=(12, 12),
         figure_title="Elliptical Orbit",
         earth_markersize=40,
@@ -327,9 +343,9 @@ if __name__ == "__main__":
         earth_colour="tab:blue",
         moon_colour="tab:red",
         moon_orbit_colour="tab:red",
-        add_axis_limits=True,
+        x_axis_limits=(-1.8e9, 5e8),
+        trail_length_pct=0.05,              # test 5% orbit trail length
         show_legend=False,
-        bit_rate=20_000,
     )
 
     
