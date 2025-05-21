@@ -167,6 +167,7 @@ def animate2d(
     interval = int(1000 / frames_per_second)    # time between frames (FuncAnimation input parameter in ms)
 
     # --- SIMULATE ORBIT --- #
+    print(f"\ngenerating 2D plot with matplotlib...\n")
     r, v = plot_orbit2d(
         r0=r0,
         v0=v0,
@@ -252,7 +253,7 @@ def animate2d(
         return moon_orbit, moon_marker
 
     def update(frame: int):
-        i0 = max(0, frame - trail_length)
+        i0 = max(0, frame - trail_length)    # starting index of trail datapoint
         x, y = r[i0:frame + 1, 0], r[i0:frame + 1, 1]
         moon_orbit.set_data(x, y)
         # update moon marker:
@@ -275,9 +276,13 @@ def animate2d(
 
     # --- SAVE ANIMATION --- #
     file_name = (
-        f"2D_orbit_{frames_per_second}fps_"
-        f"{time_periods:.1f}T_{time_step_mins}mins_dt_"
-        f"{v0}ms-1_v0_{bit_rate}kbps.{file_ext}"
+        f"2D_orbit_"
+        f"dt={time_step_mins}mins_"
+        f"T={time_periods:.2f}T_"
+        f"elev={a}_azim={b}_"
+        f"axes={max_axis_extent}_"
+        f"v0={v0}ms-1_"
+        f".{file_ext}"
     )
 
     if not create_gif:
@@ -307,7 +312,6 @@ def animate2d(
 
     return None
 
-# ----- 3D FUNCTIONS ----- #
 
 def set_axes_equal(ax):
     """
@@ -374,8 +378,10 @@ def plot_orbit3d(
 
     # --- ADD MARKERS --- #
     if not to_scale:
-        ax.scatter(0, 0, 0, color=earth_colour, s=earth_markersize, zorder=1)               # Earth position
-        ax.scatter(x[-1], y[-1], z[-1], s=moon_markersize, color=moon_colour, zorder=3)     # final Moon position
+        ax.plot(0, 0, 0, marker="o", markersize=earth_markersize, color=earth_colour)    
+        ax.plot(x[-1], y[-1], z[-1], marker="o", markersize=moon_markersize, color=moon_colour)    
+        # ax.scatter(0, 0, 0, color=earth_colour, s=earth_markersize, zorder=1)               # Earth position
+        # ax.scatter(x[-1], y[-1], z[-1], s=moon_markersize, color=moon_colour, zorder=3)     # final Moon position
     else:
         draw_sphere(ax, c=(0, 0, 0), r=R_EARTH, color=earth_colour)
         draw_sphere(ax, c=(x[-1], y[-1], z[-1]), r=R_MOON, color=moon_colour)
@@ -385,7 +391,6 @@ def plot_orbit3d(
     ax.set_xlim3d(-max_limit, max_limit)
     ax.set_ylim3d(-max_limit, max_limit)
     ax.set_zlim3d(-max_limit, max_limit)
-    
     if show_legend:
         ax.legend()
     
@@ -397,9 +402,167 @@ def plot_orbit3d(
     return r, v
 
 
+def animate3d(
+    r0: float = D_EARTH_MOON,       # average Earth-Moon distance (m)
+    v0: float = V_MOON,             # orbital speed of Moon (m/s)
+    i: float = i_MOON,
+    time_step_mins: float = 120,                     
+    time_periods: float = 1.3,          
+    trail_length_pct: float = 10,
+    frames_per_second: int = 60,
+    bit_rate: int = 20_000,        
+    figure_size: tuple = (10, 10),
+    figure_title: str = None,
+    earth_markersize: int = 3000,
+    moon_markersize: int = 100,
+    earth_colour: str = "tab:blue",
+    moon_colour: str = "tab:grey",
+    moon_orbit_colour: str = "tab:grey",
+    max_axis_extent: float = 1.1,
+    show_legend: bool = True,
+    view_angles: tuple = (30, -60),  # default elev/azim angles
+    rotate_camera: bool = False,
+    dpi: int = 100,
+    create_gif: bool = False
+) -> None:
+    interval = int(1000 / frames_per_second)    # time between frames (FuncAnimation input parameter in ms)
+
+    # --- SIMULATE ORBIT --- #
+    print(f"\ngenerating 3D plot with matplotlib...\n")
+    r, v = plot_orbit3d(
+        r0=r0,
+        v0=v0,
+        i=i,
+        time_step_mins=time_step_mins,
+        time_periods=time_periods,
+        figure_size=figure_size,
+        figure_title=figure_title,
+        earth_markersize=earth_markersize,
+        moon_markersize=moon_markersize,
+        earth_colour=earth_colour,
+        moon_colour=moon_colour,
+        moon_orbit_colour=moon_orbit_colour,
+        max_axis_extent=max_axis_extent,
+        show_legend=show_legend,
+        view_angles=view_angles
+    )
+
+    steps = r.shape[0]
+    trail_length = int(trail_length_pct / 100 * steps)
+    total_time = steps * (interval * 1e-3)
+
+    print(f"\n{steps:,} steps @ {frames_per_second} fps (~{interval * 1e-3:.3f} sec/frame)")
+    print(f"time step (dt): {time_step_mins:,.2f} mins")
+    print(f"animation duration: {total_time / 60:.2f} mins ({total_time:,.1f} sec)\n")
+    file_ext = "gif" if create_gif else "mp4"
+    print(f"writing {steps} frames to {file_ext.upper()}...\n")
+
+    # --- SETUP FIGURE --- #
+    fig = plt.figure(figsize=figure_size)
+    ax = fig.add_subplot(111, projection="3d")
+    if figure_title:
+        ax.set_title(figure_title)
+    ax.set_aspect("equal")
+    ax.set_xlabel("x (m)")
+    ax.set_ylabel("y (m)")
+    ax.set_zlabel("z (m)")
+
+    # --- AXIS LIMITS & LEGEND --- #
+    max_limit = max_axis_extent * np.max(np.abs(r))
+    ax.set_xlim3d(-max_limit, max_limit)
+    ax.set_ylim3d(-max_limit, max_limit)
+    ax.set_zlim3d(-max_limit, max_limit)
+
+    a, b = view_angles               # starting view angles
+    ax.view_init(elev=a, azim=b)     # default view: elev=30, azim=-60
+
+    # Earth position marker (remains fixed):
+    ax.plot(0, 0, 0, marker="o", markersize=earth_markersize, color=earth_colour)
+    # ax.scatter(0, 0, 0, color=earth_colour, s=earth_markersize)
+    # initialise moon orbit and marker elements::
+    moon_orbit, = ax.plot([], [], [], linestyle="-", lw=0.75, color=moon_orbit_colour, label="Moon Orbit")
+    moon_marker, = ax.plot([], [], [], marker="o", markersize=moon_markersize, color=moon_colour)    # final Moon position
+    # moon_marker = ax.scatter([], [], [], marker="o", s=moon_markersize, color=moon_colour, label="Moon")
+    if show_legend:
+        ax.legend()
+    
+    # --- ANIMATE FUNCTIONS --- #
+    def init():
+        moon_orbit.set_data_3d([], [], [])
+        moon_marker.set_data_3d([], [], [])
+        # moon_marker._offsets3d = ([], [], [])
+        return moon_orbit, moon_marker
+
+    def update(frame: int):
+        i0 = max(0, frame - trail_length)    # starting index of trail datapoint
+        x, y, z = r[i0:frame + 1, 0], r[i0:frame + 1, 1], r[i0:frame + 1, 2]
+        # update moon orbit trail:
+        moon_orbit.set_data_3d(x, y, z)
+        # update moon marker:
+        moon_marker.set_data_3d([x[-1]], [y[-1]], [z[-1]])
+        # moon_marker._offsets3d = ([x[-1]], [y[-1]], [z[-1]])
+        # rotate camera view (elevation & azimuth angle):
+        if rotate_camera:
+            elev = (a + 0.005 * frame) % 360  # slowly spin elevation
+            azim = (b - 0.04 * frame) % 360  # slowly spin azimuth
+            ax.view_init(elev=elev, azim=azim)
+        pbar.update(1)     # update progress bar
+        return moon_orbit, moon_marker
+
+    pbar = tqdmFA(total=steps)     # progress bar for logging
+    ani = FuncAnimation(
+        fig=fig,
+        func=update,
+        frames=range(steps),
+        init_func=init,
+        interval=interval,
+        repeat=False,
+        blit=True,
+    )
+
+    # --- SAVE ANIMATION --- #
+    file_name = (
+        f"3D_orbit_"
+        f"dt={time_step_mins}mins_"
+        f"T={time_periods:.2f}T_"
+        f"elev={a}_azim={b}_"
+        f"axes={max_axis_extent}_"
+        f"v0={v0}ms-1_"
+        f"rot={rotate_camera}_"
+        f".{file_ext}"
+    )
+
+    if not create_gif:
+        writer = FFMpegWriter(
+            fps=frames_per_second,
+            bitrate=bit_rate,
+        )
+    else:
+        writer = PillowWriter(
+            fps=frames_per_second,
+        )
+    dpi = 100 if create_gif else dpi
+    ani.save(filename=file_name, writer=writer, dpi=dpi)
+    pbar.close()    # close progress bar
+
+    # --- REPORT --- #
+    elapsed = int(pbar.format_dict["elapsed"])
+    t = datetime.timedelta(seconds=elapsed)
+    print(f"\n\ntotal elapsed time: {t}")
+
+    avg_iter_per_sec = steps / t.total_seconds()
+    if 1 / avg_iter_per_sec < 1:
+        avg_rate = f"{1 / avg_iter_per_sec * 1e3:.0f} ms/frame"
+    else:
+        avg_rate = f"{1 / avg_iter_per_sec:.2f} sec/frame"
+    print(f"{avg_iter_per_sec:.1f} frames/sec processed ({avg_rate})")
+
+    return None
+
+
 if __name__ == "__main__":
 
-    # ----- 2D EXAMPLES: ANIMATE ORBITAL MOTION ----- #
+    # ----- 2D ANIMATION EXAMPLES ----- #
 
     # Moon Orbit around Earth:
     animate2d(
@@ -414,7 +577,7 @@ if __name__ == "__main__":
         trail_length_pct=5
     )
 
-    # Higher eccentricity elliptical orbit:
+    # higher eccentricity elliptical orbit:
     animate2d(
         v0=V_MOON + 278,    # faster initial orbital velocity for the Moon
         time_step_mins=300,
@@ -429,4 +592,44 @@ if __name__ == "__main__":
         x_axis_limits=(-1.8e9, 5e8),
         trail_length_pct=5,    # test a shorter 5% orbit trail length
         show_legend=False,
+    )
+
+    # ----- 3D ANIMATION EXAMPLES ----- #
+
+    # Moon orbit around Earth:
+    animate3d(
+        time_step_mins=120,
+        time_periods=1.02,    # no. of time periods (lunar orbits)
+        figure_size=(12, 12),
+        figure_title="Moon Orbit Around Fixed Earth (NOT TO SCALE)",
+        earth_markersize=35,
+        moon_markersize=12,
+        earth_colour="tab:blue",
+        moon_colour="tab:grey",
+        moon_orbit_colour="tab:grey",
+        max_axis_extent=0.75,
+        trail_length_pct=8,
+        show_legend=True,
+        view_angles=(20, -40),     # default angles: elev=30, azim=-60
+        # rotate_camera=True,
+        dpi=200
+    )
+
+    animate3d(
+        v0=V_MOON + 150,        # faster initial orbital velocity for the Moon
+        i=25,                   # inclination angle
+        time_step_mins=180,
+        time_periods=4.5,      # no. of time periods (lunar orbits)
+        figure_size=(12, 12),
+        earth_markersize=30,
+        moon_markersize=10,
+        earth_colour="tab:orange",
+        moon_colour="tab:purple",
+        moon_orbit_colour="tab:purple",
+        max_axis_extent=0.75,
+        trail_length_pct=8,
+        view_angles=(20, -40),  # default angles: elev=30, azim=-60
+        show_legend=False,
+        rotate_camera=True,
+        dpi=200
     )
