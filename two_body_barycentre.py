@@ -64,7 +64,7 @@ def two_body_system(
     print(f"\nsolver success: {success} ({sol.nfev:,} nfev)")
     print(f"t.shape: {t.shape}, Z.shape: {Z.shape}\n")
     # also return vector of any essential parameters:
-    p = [Z0, T]  
+    p = [m1, m2, d, v0, Z0, T]  
 
     return t, Z, p
 
@@ -72,12 +72,12 @@ def two_body_system(
 def plot_orbits2d(
     t, Z, p,
     in_degrees: bool = True,
-    earth_colour: str = "tab:blue",
-    earth_trail_colour: str = "tab:blue",
-    moon_colour: str = "tab:grey",
-    moon_trail_colour: str = "tab:grey",
-    earth_markersize: int = 100,
-    moon_markersize: int = 40,
+    m1_colour: str = "tab:blue",
+    m1_trail_colour: str = "tab:blue",
+    m2_colour: str = "tab:grey",
+    m2_trail_colour: str = "tab:grey",
+    m1_markersize: int = 500,
+    m2_markersize: int = 100,
     figure_size: tuple = (8, 8),
     figure_title: str = None,
     line_width: float = 0.75,
@@ -88,51 +88,59 @@ def plot_orbits2d(
     y_axis_limits: tuple = None,
     max_axis_extent: float = 1.05,
     show_legend: bool = False,
-    to_scale: bool = False
+    to_scale: bool = False,
+    radius1: float = R_EARTH,
+    radius2: float = R_MOON,
+    show_barycentre: bool = False
     ) -> None:
 
-    r_e, v_e, r_m, v_m = np.vsplit(Z, 4)    # unpack state vector (split along rows)
-    x_e, y_e = r_e[0, :], r_e[1, :]         # unpack Earth's 2D coordinates
-    x_m, y_m = r_m[0, :], r_m[1, :]         # unpack Moon's 2D coordinates  
-
-    r_e0, v_e0, r_m0, v_m0 = np.split(p[0], 4)           # unpack initial state vector
+    r1, v1, r2, v2 = np.vsplit(Z, 4)    # unpack state vector (split along rows)
+    x1, y1 = r1[0, :], r1[1, :]         # unpack Earth's 2D coordinates
+    x2, y2 = r2[0, :], r2[1, :]         # unpack Moon's 2D coordinates  
 
     # ----- FIGURE ----- #
     fig, ax = plt.subplots(figsize=figure_size)
-    ax.grid(True, alpha=grid_alpha)
     ax.xaxis.set_major_locator(MaxNLocator(x_axis_max_ticks))
     ax.yaxis.set_major_locator(MaxNLocator(y_axis_max_ticks))
     if figure_title:
         ax.set_title(figure_title)
     ax.set_xlabel(r"$x$ ($m$)")
     ax.set_ylabel(r"$y$ ($m$)")
+    # grids and dashed lines
+    ax.grid(True, alpha=grid_alpha)
+    if show_barycentre:     # barycentre lies at the origin
+        dashed_alpha, dashed_linewidth = 0.1, 0.8
+        hline = ax.axhline(0, linestyle="--", color="black", alpha=dashed_alpha, linewidth=dashed_linewidth)
+        vline = ax.axvline(0, linestyle="--", color="black", alpha=dashed_alpha, linewidth=dashed_linewidth)
+        hline.set_dashes([10, 10]), vline.set_dashes([10, 10])
+        ax.scatter(0, 0, marker="x", s=25, color="tab:red", label="barycentre", zorder=10)
 
     # --- PLOT EARTH & MOON ORBITS --- #
     line_width = 0.5 if to_scale else line_width
-    ax.plot(x_e, y_e, color=earth_trail_colour, linewidth=line_width)
-    ax.plot(x_m, y_m, color=moon_trail_colour, linewidth=line_width)
+    ax.plot(x1, y1, color=m1_trail_colour, linewidth=line_width)
+    ax.plot(x2, y2, color=m2_trail_colour, linewidth=line_width)
 
     # --- ADD MARKERS --- #
-    if to_scale:
-        earth = Circle((x_e[-1], y_e[-1]), radius=R_EARTH, color=earth_colour, label="Earth")
-        moon = Circle((x_m[-1], y_m[-1]), radius=R_MOON, color=moon_colour, label="Moon")
-        ax.add_patch(earth), ax.add_patch(moon)
+    if to_scale:    # show Earth & Moon to scale
+        body1 = Circle((x1[-1], y1[-1]), radius=radius1, color=m1_colour)
+        body2 = Circle((x2[-1], y2[-1]), radius=radius2, color=m2_colour)
+        ax.add_patch(body1), ax.add_patch(body2)
     else:
-        ax.scatter(x_m[-1], y_m[-1], color=moon_colour, s=moon_markersize, label="Moon")
-        ax.scatter(x_e[-1], y_e[-1], color=earth_colour, s=earth_markersize, label="Earth")
+        ax.scatter(x1[-1], y1[-1], color=m1_colour, s=m1_markersize)
+        ax.scatter(x2[-1], y2[-1], color=m2_colour, s=m2_markersize)
 
     # --- AXIS LIMITS & LEGEND --- #
     # independent overrides (if only one set of limits is provided):
     if x_axis_limits:
         ax.set_xlim(x_axis_limits)
     else:
-        x_all = np.concatenate([x_e, x_m])
+        x_all = np.concatenate([x1, x2])
         x_extent = max_axis_extent * np.max(np.abs(x_all))
         ax.set_xlim(-x_extent, x_extent)
     if y_axis_limits:
         ax.set_ylim(y_axis_limits)
     else:
-        y_all = np.concatenate([y_e, y_m])
+        y_all = np.concatenate([y1, y2])
         y_extent = max_axis_extent * np.max(np.abs(y_all))
         ax.set_ylim(-y_extent, y_extent)
     if show_legend:
@@ -152,4 +160,5 @@ if __name__ == "__main__":
         t, Z, p,
         to_scale=True,
         figure_title="Earth-Moon System (TO SCALE)",
+        show_barycentre
     )
