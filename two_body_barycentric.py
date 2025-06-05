@@ -17,7 +17,9 @@ def two_body_system(
         i_deg: float = i_MOON,
         T_days: float = 27.321,
         steps: int = 1000,
-        ode_method: str = "RK45"
+        ode_method: str = "RK45",
+        rtol: float = 1e-3,
+        atol: float = 1e-6
     ) -> tuple:
 
     # initial position vectors of mass 1 and mass 2:
@@ -55,8 +57,9 @@ def two_body_system(
     dt = t_eval[1] - t_eval[0]                              # time eval step size
 
     print(f"\nrunning ODE solver ({ode_method=})...")
-    print(f"t_eval=({t_eval[0]:.0f}, {t_eval[-1]}), {steps=:,}, dt≈{dt:.2f}")#
-    sol = solve_ivp(func, t_span, Z0, t_eval=t_eval, method=ode_method)
+    print(f"using {rtol=:.0e}, {atol=:.0e} (default: rtol=1e-3, atol=1e-6)")
+    print(f"t_eval=({t_eval[0]:.0f}, {t_eval[-1]:,.0f}), {steps=:,}, dt≈{dt:.2f}")
+    sol = solve_ivp(func, t_span, Z0, t_eval=t_eval, method=ode_method, rtol=rtol, atol=atol)
 
     # ----- EXTRACT RESULTS ----- #
     t, Z = sol.t, sol.y
@@ -76,9 +79,9 @@ def plot_orbits2d(
     m1_trail_colour: str = "tab:blue",
     m2_colour: str = "tab:grey",
     m2_trail_colour: str = "tab:grey",
-    m1_markersize: int = 500,
+    m1_markersize: int = 1000,
     m2_markersize: int = 100,
-    figure_size: tuple = (8, 8),
+    figure_size: tuple = (10, 10),
     figure_title: str = None,
     line_width: float = 0.75,
     grid_alpha: float = 0.15,
@@ -90,7 +93,9 @@ def plot_orbits2d(
     show_legend: bool = False,
     to_scale: bool = False,
     radius1: float = R_EARTH,
+    body1_label: str = None,
     radius2: float = R_MOON,
+    body2_label: str = None,
     show_barycentre: bool = False
     ) -> None:
 
@@ -110,20 +115,20 @@ def plot_orbits2d(
     ax.grid(True, alpha=grid_alpha)
     if show_barycentre:     # barycentre lies at the origin
         dashed_alpha, dashed_linewidth = 0.1, 0.8
-        hline = ax.axhline(0, linestyle="--", color="black", alpha=dashed_alpha, linewidth=dashed_linewidth)
-        vline = ax.axvline(0, linestyle="--", color="black", alpha=dashed_alpha, linewidth=dashed_linewidth)
+        hline = ax.axhline(0, linestyle="--", color="black", alpha=dashed_alpha, linewidth=dashed_linewidth, zorder=1)
+        vline = ax.axvline(0, linestyle="--", color="black", alpha=dashed_alpha, linewidth=dashed_linewidth, zorder=1)
         hline.set_dashes([10, 10]), vline.set_dashes([10, 10])
-        ax.scatter(0, 0, marker="x", s=25, color="tab:red", label="barycentre", zorder=10)
+        ax.scatter(0, 0, marker="x", s=25, color="tab:red", label="barycentre", alpha=0.4, zorder=10)
 
     # --- PLOT EARTH & MOON ORBITS --- #
-    line_width = 0.5 if to_scale else line_width
+    line_width = 0.65 if to_scale else line_width
     ax.plot(x1, y1, color=m1_trail_colour, linewidth=line_width)
     ax.plot(x2, y2, color=m2_trail_colour, linewidth=line_width)
 
     # --- ADD MARKERS --- #
     if to_scale:    # show Earth & Moon to scale
-        body1 = Circle((x1[-1], y1[-1]), radius=radius1, color=m1_colour)
-        body2 = Circle((x2[-1], y2[-1]), radius=radius2, color=m2_colour)
+        body1 = Circle((x1[-1], y1[-1]), radius=radius1, color=m1_colour, label=body1_label, zorder=5)
+        body2 = Circle((x2[-1], y2[-1]), radius=radius2, color=m2_colour, label=body2_label, zorder=5)
         ax.add_patch(body1), ax.add_patch(body2)
     else:
         ax.scatter(x1[-1], y1[-1], color=m1_colour, s=m1_markersize)
@@ -148,17 +153,63 @@ def plot_orbits2d(
     plt.show()
 
 
-
 if __name__ == "__main__":
 
+    # ----- SIMULATE PLUTO-CHARON SYSTEM ----- #
+
+    t, Z, p = two_body_system(
+        m1=M_PLUTO,
+        m2=M_CHARON,        # mass of Charon (kg)
+        d=D_PLUTO_CHARON,    # average distance between Pluto and Charon (m)
+        v0=V_CHARON,      # orbital speed of Charon (m/s)
+        i_deg=i_CHARON,    # inclination angle (degrees)
+        T_days=T_PLUTO_CHARON * 1.2, # orbital period of Charon around Pluto (days)
+        rtol=1e-6,
+        steps=1000
+    )
+
+    plot_orbits2d(
+        t, Z, p,
+        m1_colour="tab:brown",
+        m1_trail_colour="tab:brown",
+        m2_colour="tab:olive",
+        m2_trail_colour="tab:olive",
+        figure_title="Pluto-Charon System (TO SCALE)",
+        show_barycentre=True,
+        to_scale=True,
+        radius1=R_PLUTO,
+        body1_label="Pluto",
+        radius2=R_CHARON,
+        body2_label="Charon",
+        show_legend=True,
+        max_axis_extent=1.15,
+    )
 
     # ----- SIMULATE EARTH-MOON SYSTEM (DEFAULT PARAMETERS) ----- #
 
-    t, Z, p = two_body_system(steps=5000)
+    t, Z, p = two_body_system(steps=5000, rtol=1e-6)
 
     plot_orbits2d(
         t, Z, p,
         to_scale=True,
         figure_title="Earth-Moon System (TO SCALE)",
-        show_barycentre
+    )
+
+    # ----- HIGHLY EXAGGERATED EARTH-MOON SYSTEM ----- #
+
+    t, Z, p = two_body_system(
+        m1=M_EARTH * 0.2,
+        d=D_EARTH_MOON * 0.1,
+        T_days=3,
+        rtol=1e-9,
+        steps=1000
+    )
+
+    plot_orbits2d(
+        t, Z, p,
+        figure_title="EXAGGERATED Earth-Moon System (NOT TO SCALE)",
+        show_barycentre=True,
+        show_legend=True,
+        max_axis_extent=1.15,
+        x_axis_limits=(-1.5e7, 4e7)
     )
