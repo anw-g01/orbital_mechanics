@@ -1,40 +1,36 @@
 from constants import *
-from two_body_fixed_host import plot_orbit3d, animate3d
-
+from two_body_barycentric import TwoBodySystem
+from config import SystemParams, PlotConfig
 
 if __name__ == "__main__":
 
-    # r, v = plot_orbit3d(
-    #     v0=V_MOON + 278,    # faster initial orbital velocity for the Moon
-    #     i=20,               # inclination angle 
-    #     time_step_mins=600,
-    #     time_periods=4.5,                   # no. of time periods (lunar orbits)
-    #     figure_size=(12, 12),
-    #     earth_markersize=2000,
-    #     moon_markersize=100,
-    #     earth_colour="tab:blue",
-    #     moon_colour="tab:red",
-    #     moon_orbit_colour="tab:red",
-    #     max_axis_extent=0.5,
-    #     show_legend=False,
-    #     # to_scale=True,
-    #     view_angles=(20, -50)     # default angles: elev=30, azim=-60
-    # )
+    pluto_charon = TwoBodySystem(
+        params=SystemParams(
+            m1=M_PLUTO, 
+            m2=M_CHARON, 
+            d=D_PLUTO_CHARON, 
+            v0=V_CHARON, 
+            i_deg=i_CHARON, 
+            T_days=T_PLUTO_CHARON * 4,
+            rtol=1e-6, steps=1000
+        ),
+        config=PlotConfig(
+            body1_radius=R_PLUTO, 
+            body2_radius=R_CHARON,
+            figure_size=(10, 10),
+            figure_title="Pluto-Charon System (TO SCALE)",
+            body1_legend_label="Pluto", 
+            body2_legend_label="Charon",
+            body1_colour="tab:brown", 
+            body1_trail_colour="tab:brown",
+            body2_colour="tab:olive", 
+            body2_trail_colour="tab:olive",
+            show_legend=True, 
+            to_scale=True, 
+            show_bc=True
+        )
+    )
 
-        # animate3d(
-    #     time_step_mins=120,
-    #     time_periods=1.02,    # no. of time periods (lunar orbits)
-    #     figure_size=(12, 12),
-    #     figure_title="Moon Orbit Around Fixed Earth (NOT TO SCALE)",
-    #     earth_markersize=35,
-    #     moon_markersize=12,
-    #     earth_colour="tab:blue",
-    #     moon_colour="tab:grey",
-    #     moon_orbit_colour="tab:grey",
-    #     max_axis_extent=0.75,
-    #     trail_length_pct=8,
-    #     show_legend=True,
-    #     view_angles=(20, -40),     # default angles: elev=30, azim=-60
-    #     # rotate_camera=True,
-    #     dpi=200
-    # )
+    # pluto_charon.plot_orbits2d()
+
+    pluto_charon.animate2d(trail_length_pct=8, dpi=100)
