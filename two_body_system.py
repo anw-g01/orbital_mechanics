@@ -11,7 +11,7 @@ from config import SystemParams, PlotConfig
 from typing import Optional, Tuple
 # configure matplotlib defaults
 plt.rcParams.update({
-    "font.size": 8,
+    "font.size": 9,
     "font.family": "monospace",
     "lines.linewidth": 1
 })
@@ -144,6 +144,7 @@ class TwoBodySystem:
             y_all = np.concatenate(y_coords)    # (y1, y2)
             y_extent = cf.max_axis_extent * np.max(np.abs(y_all))
             ax.set_ylim(-y_extent, y_extent)
+        ax.set_aspect("equal")    # ensure equal aspect ratio after setting limits
         return fig, ax
 
     def plot_orbits2d(self) -> None:
@@ -173,8 +174,8 @@ class TwoBodySystem:
             body2 = Circle((x2[-1], y2[-1]), radius=cf.body2_radius, color=cf.body2_colour, label=cf.body2_legend_label, zorder=5)
             ax.add_patch(body1), ax.add_patch(body2)
         else:
-            ax.scatter(x1[-1], y1[-1], color=cf.body1_colour, s=cf.body1_markersize)
-            ax.scatter(x2[-1], y2[-1], color=cf.body2_colour, s=cf.body2_markersize)
+            ax.scatter(x1[-1], y1[-1], color=cf.body1_colour, s=cf.body1_markersize, zorder=5)
+            ax.scatter(x2[-1], y2[-1], color=cf.body2_colour, s=cf.body2_markersize, zorder=5)
 
         if cf.show_legend:
             ax.legend()
@@ -277,6 +278,8 @@ class TwoBodySystem:
         writer = FFMpegWriter(fps=fps, bitrate=bitrate)
         # generate a file name:
         name1, name2 = cf.body1_legend_label, cf.body2_legend_label
+        if not name1 or not name2:
+            name1, name2 = "body1", "body2"
         time_period = self.params.T_days
         file_name = (
             f"2D_{name1.lower()}-{name2.lower()}_"
@@ -305,6 +308,7 @@ class TwoBodySystem:
 # ----- EXAMPLE USAGE OF THE CLASS ----- #
 
 def pluto_charon_system() -> None:
+    """Simulate and animate the Pluto-Charon two-body system with realistic parameters."""
     pluto_charon = TwoBodySystem(
         params=SystemParams(
             m1=M_PLUTO, 
@@ -340,27 +344,95 @@ def pluto_charon_system() -> None:
     )
 
 
-def earth_moon_system() -> None:
-    earth_moon = TwoBodySystem(
+def earth_moon_system(exaggerated: bool = False) -> None:
+    """
+    Simulate and animate the Earth-Moon two-body system with realistic parameters.
+    
+    Args:
+        `exaggerated` (`bool`): whether to exaggerate the orbital paths in the animation.
+    """
+    if not exaggerated:
+        earth_moon = TwoBodySystem(
+            params=SystemParams(
+                rtol=1e-9, 
+                steps=1000,
+                T_days=27.321 * 1.03 * 3,  
+            ),
+            config=PlotConfig(
+                figure_size=(10, 10),
+                figure_title="Earth-Moon System (TO SCALE)",
+                body1_legend_label="Earth", 
+                body2_legend_label="Moon",
+                max_axis_extent=1.05,
+                line_width=0.5,
+                to_scale=True, 
+                show_bc=False
+            )
+        )
+        # earth_moon.plot_orbits2d()
+        earth_moon.animate2d(
+            trail_length_pct=2,
+            trail_length_factor=4,
+            dpi=200
+        )
+    else:
+        earth_moon = TwoBodySystem(
+            params=SystemParams(
+                m1=M_EARTH * 0.4, m2=M_MOON * 1, 
+                d=D_EARTH_MOON * 0.1, v0=V_MOON * 1, 
+                i_deg=i_MOON, 
+                T_days=0.62 * 3,
+                rtol=1e-6, 
+                steps=750
+            ),
+            config=PlotConfig(
+                figure_size=(10, 10),
+                figure_title="EXAGGERATED Earth-Moon System (NOT TO SCALE)",
+                body1_legend_label="Earth'", body2_legend_label="Moon'",
+                body1_colour="tab:blue", body1_trail_colour="tab:blue",
+                body2_colour="tab:red", body2_trail_colour="tab:red",
+                max_axis_extent=1.4, 
+                x_axis_limits=(-1e7, 4.5e7),
+                show_legend=True, 
+                to_scale=False, 
+                show_bc=True, bc_alpha=0.8
+            )
+        )
+        earth_moon.animate2d(
+            trail_length_pct=2,
+            trail_length_factor=,
+            dpi=200
+        )
+
+
+def equal_mass_system() -> None:
+    """Simulate and animate a two-body system with equal masses."""
+    mass = M_EARTH              # use Earth mass for both bodies
+    radius = R_EARTH            # use Earth radius for both bodies (if to scale)
+    distance = D_EARTH_MOON     # use Earth-Moon distance
+    orbits = 3                  # number of orbits (roughly) to simulate
+    equal_mass = TwoBodySystem(
         params=SystemParams(
+            m1=mass, m2=mass, d=distance, 
+            v0=600, 
+            i_deg=10, 
+            T_days=26 * orbits,
             rtol=1e-9, 
-            steps=1000,
-            T_days=27.321 * 1.03 * 3,  
+            steps=750
         ),
         config=PlotConfig(
-            figure_size=(10, 10),
-            figure_title="Earth-Moon System (TO SCALE)",
-            body1_legend_label="Earth", 
-            body2_legend_label="Moon",
-            max_axis_extent=1.05,
-            line_width=0.5,
-            to_scale=True, 
-            show_bc=False
+            body1_radius=radius, body2_radius=radius,
+            body1_colour="tab:red", body1_trail_colour="tab:red",
+            body2_colour="tab:green", body2_trail_colour="tab:green",
+            figure_size=(10, 10), figure_title="Equal Mass Two-Body System",
+            max_axis_extent=1.1, y_axis_limits=(-2.5e8, 2.5e8),
+            to_scale=True, show_legend=True,
+            show_bc=True, bc_alpha=0.8, bc_colour="tab:blue", bc_markersize=50            
         )
     )
-    # earth_moon.plot_orbits2d()
-    earth_moon.animate2d(
-        trail_length_pct=2,
-        trail_length_factor=4,
-        dpi=200
+    # equal_mass.plot_orbits2d()
+    equal_mass.animate2d(
+        trail_length_pct=5,
+        trail_length_factor=1,
+        dpi=300
     )
