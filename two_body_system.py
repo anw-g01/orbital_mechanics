@@ -94,6 +94,58 @@ class TwoBodySystem:
             return self._solve()
         return self.t, self.Z   # return existing cached solution if available
 
+    def _create_figure2d(
+        self, 
+        x_coords: Tuple[np.ndarray, np.ndarray], 
+        y_coords: Tuple[np.ndarray, np.ndarray]
+    ) -> Tuple[plt.Figure, plt.Axes]:
+        """Setup a 2D base figure with axes for plotting the two-body system.
+        
+        Args:
+            `x_coords` (`Tuple[np.ndarray, np.ndarray]`): x-coordinates of the two bodies.
+            `y_coords` (`Tuple[np.ndarray, np.ndarray]`): y-coordinates of the two bodies.
+
+        Returns:
+            `fig` (`plt.Figure`): the created figure.
+            `ax` (`plt.Axes`): the axes for plotting.
+        """
+        cf = self.config    # shorthand alias for the PlotConfig instance
+        
+        # ----- FIGURE SETUP ----- #
+        fig, ax = plt.subplots(figsize=cf.figure_size)    # create a figure with specified size
+        if cf.figure_title:
+            ax.set_title(cf.figure_title)
+        ax.xaxis.set_major_locator(MaxNLocator(cf.x_axis_max_ticks))
+        ax.yaxis.set_major_locator(MaxNLocator(cf.y_axis_max_ticks))
+        ax.set_xlabel(r"$x$ ($m$)")
+        ax.set_ylabel(r"$y$ ($m$)")
+
+        # ----- GRIDS AND DASHED LINES ----- #
+        ax.grid(True, alpha=cf.grid_alpha)
+        hline = ax.axhline(0, linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
+        vline = ax.axvline(0, linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
+        hline.set_dashes([10, 10])
+        vline.set_dashes([10, 10])
+
+        # show barycentre marker (lies exactly at the origin):
+        if cf.show_bc:     
+            ax.scatter(0, 0, marker="x", s=cf.bc_markersize, color=cf.bc_colour, label=cf.bc_legend_label, alpha=cf.bc_alpha, zorder=10)
+        
+        # --- AXIS LIMITS & LEGEND --- #
+        if cf.x_axis_limits:
+            ax.set_xlim(cf.x_axis_limits)
+        else:
+            x_all = np.concatenate(x_coords)    # (x1, x2)
+            x_extent = cf.max_axis_extent * np.max(np.abs(x_all))
+            ax.set_xlim(-x_extent, x_extent)
+        if cf.y_axis_limits:
+            ax.set_ylim(cf.y_axis_limits)
+        else:
+            y_all = np.concatenate(y_coords)    # (y1, y2)
+            y_extent = cf.max_axis_extent * np.max(np.abs(y_all))
+            ax.set_ylim(-y_extent, y_extent)
+        return fig, ax
+
     def plot_orbits2d(self) -> None:
         """Plot the complete orbits of the two bodies in 2D, using parameters defined in `self.config`."""
         cf = self.config    # shorthand alias for the PlotConfig instance
@@ -108,22 +160,8 @@ class TwoBodySystem:
         x1, y1 = r1[0, :], r1[1, :]         # unpack body 1 2D coordinates
         x2, y2 = r2[0, :], r2[1, :]         # unpack body 2 2D coordinates  
         
-        # ----- FIGURE SETUP ----- #
-        fig, ax = plt.subplots(figsize=cf.figure_size)
-        ax.set_aspect("equal")
-        ax.xaxis.set_major_locator(MaxNLocator(cf.x_axis_max_ticks))
-        ax.yaxis.set_major_locator(MaxNLocator(cf.y_axis_max_ticks))
-        if cf.figure_title:
-            ax.set_title(cf.figure_title)
-        ax.set_xlabel(r"$x$ ($m$)")
-        ax.set_ylabel(r"$y$ ($m$)")
-        # grids and dashed lines
-        ax.grid(True, alpha=cf.grid_alpha)
-        hline = ax.axhline(0, linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
-        vline = ax.axvline(0, linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
-        hline.set_dashes([10, 10]), vline.set_dashes([10, 10])
-        if cf.show_bc:     # barycentre lies at the origin
-            ax.scatter(0, 0, marker="x", s=cf.bc_markersize, color=cf.bc_colour, label=cf.bc_legend_label, alpha=cf.bc_alpha, zorder=10)
+        # ----- MAIN FIGURE ----- #
+        fig, ax = self._create_figure2d((x1, x2), (y1, y2))   # create a 2D base figure with axes
 
         # --- PLOT FULL ORBIT TRAILS --- #
         ax.plot(x1, y1, color=cf.body1_trail_colour, linewidth=cf.line_width)
@@ -138,19 +176,6 @@ class TwoBodySystem:
             ax.scatter(x1[-1], y1[-1], color=cf.body1_colour, s=cf.body1_markersize)
             ax.scatter(x2[-1], y2[-1], color=cf.body2_colour, s=cf.body2_markersize)
 
-        # --- AXIS LIMITS & LEGEND --- #
-        if cf.x_axis_limits:
-            ax.set_xlim(cf.x_axis_limits)
-        else:
-            x_all = np.concatenate([x1, x2])
-            x_extent = cf.max_axis_extent * np.max(np.abs(x_all))
-            ax.set_xlim(-x_extent, x_extent)
-        if cf.y_axis_limits:
-            ax.set_ylim(cf.y_axis_limits)
-        else:
-            y_all = np.concatenate([y1, y2])
-            y_extent = cf.max_axis_extent * np.max(np.abs(y_all))
-            ax.set_ylim(-y_extent, y_extent)
         if cf.show_legend:
             ax.legend()
         plt.show()
@@ -158,6 +183,7 @@ class TwoBodySystem:
     def animate2d(
         self, 
         trail_length_pct: float = 10, 
+        trail_length_factor: float = 3,
         fps: int = 60, dpi: int = 200, 
         bitrate: int = 50_000
     ) -> None:
@@ -165,9 +191,10 @@ class TwoBodySystem:
         Animate the 2D orbits of the two-body system, by writing an MP4 file.
 
         Args:
-            `trail_length_pct` (`float`): Percentage of the total number of steps to use as the orbit trail length.
-            `fps` (`int`): Frames per second for the animation.
-            `dpi` (`int`): Dots per inch for the saved animation file.
+            `trail_length_pct` (`float`): percentage of the total number of steps to use as the orbit trail length.
+            `trail_length_factor` (`float`): factor by which to extend the trail length for the first body.
+            `fps` (`int`): frames per second for the animation.
+            `dpi` (`int`): dots per inch for the saved animation file.
         """
 
         cf = self.config    # shorthand alias for the PlotConfig instance
@@ -179,15 +206,18 @@ class TwoBodySystem:
             t, Z = self.t, self.Z
 
         # show the static complete orbit trails (final positions) first:
-        print(f"\nplotting final positions with complete orbit trails...")
-        print("<CLOSE FIGURE WINDOW TO START ANIMATION WRITING>\n")
+        print(f"plotting final positions with complete orbit trails...")
+        print("<CLOSE FIGURE WINDOW TO START ANIMATION WRITING>")
         self.plot_orbits2d()    # figure window must be closed before continuing 
 
         # key animation statistics
         interval = int(1000 / fps)     # convert FPS to milliseconds
         steps = len(t)                                      # total number of time steps from the ODE solver
         trail_length = int((trail_length_pct / 100) * steps) 
-        print(f"\n{steps:,} steps @ {fps} fps (~{interval * 1e-3:.3f} sec/frame)")
+        print(f"\n{steps:,} steps @ {fps} fps (~{interval * 1e-3:.3f} sec/frame) and {dpi} DPI")
+        duration = steps / fps
+        sec_per_orbit = self.params.T_days * 24 * 3600 / steps    # seconds per orbit step
+        print(f"total video duration: {duration:.2f} sec ({duration / 60:.1f} min)")
         print(f"writing {steps} frames to MP4...\n")
 
         # ----- EXTRACT COORDINATES ----- #
@@ -196,21 +226,7 @@ class TwoBodySystem:
         x2, y2 = r2[0, :], r2[1, :]         # unpack body 2 2D coordinates  
 
         # ----- FIGURE SETUP ----- #
-        fig, ax = plt.subplots(figsize=cf.figure_size)
-        ax.set_aspect("equal")
-        ax.xaxis.set_major_locator(MaxNLocator(cf.x_axis_max_ticks))
-        ax.yaxis.set_major_locator(MaxNLocator(cf.y_axis_max_ticks))
-        if cf.figure_title:
-            ax.set_title(cf.figure_title)
-        ax.set_xlabel(r"$x$ ($m$)")
-        ax.set_ylabel(r"$y$ ($m$)")
-        # grids and dashed lines
-        ax.grid(True, alpha=cf.grid_alpha)
-        hline = ax.axhline(0, linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
-        vline = ax.axvline(0, linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
-        hline.set_dashes([10, 10]), vline.set_dashes([10, 10])
-        if cf.show_bc:     # barycentre lies at the origin
-            ax.scatter(0, 0, marker="x", s=cf.bc_markersize, color=cf.bc_colour, label=cf.bc_legend_label, alpha=cf.bc_alpha, zorder=10)
+        fig, ax = self._create_figure2d((x1, x2), (y1, y2))   # create a 2D base figure with axes
 
         # --- PLOT ELEMENTS (TO BE UPDATED IN ANIMATION) --- #
         if cf.to_scale:    # show planetary bodies to scale
@@ -223,28 +239,16 @@ class TwoBodySystem:
         body1_orbit, = ax.plot([], [], color=cf.body1_trail_colour, linewidth=cf.line_width)
         body2_orbit, = ax.plot([], [], color=cf.body2_trail_colour, linewidth=cf.line_width)
 
-        # --- AXIS LIMITS & LEGEND --- #
-        if cf.x_axis_limits:
-            ax.set_xlim(cf.x_axis_limits)
-        else:
-            x_all = np.concatenate([x1, x2])
-            x_extent = cf.max_axis_extent * np.max(np.abs(x_all))
-            ax.set_xlim(-x_extent, x_extent)
-        if cf.y_axis_limits:
-            ax.set_ylim(cf.y_axis_limits)
-        else:
-            y_all = np.concatenate([y1, y2])
-            y_extent = cf.max_axis_extent * np.max(np.abs(y_all))
-            ax.set_ylim(-y_extent, y_extent)
         if cf.show_legend:
             ax.legend()
 
         # --- PROGRESS BAR --- #
-        pbar = tqdmFA(total=len(t))
+        pbar = tqdmFA(total=steps, fps=fps)
 
         # ----- ANIMATION FUNCTION SETUP ----- #
         def init():
-            body1_orbit.set_data([], []), body2_orbit.set_data([], [])
+            body1_orbit.set_data([], [])
+            body2_orbit.set_data([], [])
             if cf.to_scale:
                 body1_marker.center = (x1[0], y1[0])
                 body2_marker.center = (x2[0], y2[0])
@@ -256,8 +260,9 @@ class TwoBodySystem:
         def update(frame):
             """Update orbit trails and marker positions."""
             i0 = max(0, frame - trail_length)    # start index for the trail
-            body1_orbit.set_data(x1[i0: frame + 1], y1[i0: frame + 1])    # update orbit trail
-            body1_orbit.set_data(x2[i0: frame + 1], y2[i0: frame + 1])
+            i0_1 = max(0, frame - int(trail_length * trail_length_factor))    # longer trail for body 1
+            body1_orbit.set_data(x1[i0_1: frame + 1], y1[i0_1: frame + 1])      # update orbit trail
+            body2_orbit.set_data(x2[i0: frame + 1], y2[i0: frame + 1])
             if cf.to_scale:
                 body1_marker.center = (x1[frame], y1[frame])    # update matplotlib.patches.Circle position
                 body2_marker.center = (x2[frame], y2[frame])
@@ -274,11 +279,12 @@ class TwoBodySystem:
         name1, name2 = cf.body1_legend_label, cf.body2_legend_label
         time_period = self.params.T_days
         file_name = (
-            f"2D_baryc_{name1.lower()}-{name2.lower()}_"
-            f"{time_period=:.1f}_"
-            f"{trail_length_pct:.0f}%trail_"
-            f"{cf.to_scale=}_"
+            f"2D_{name1.lower()}-{name2.lower()}_"
+            f"{dpi=}_"
+            f"{trail_length_pct:.0f}%trail(factor={trail_length_factor})_"
             f"{steps=:,.0f}_"
+            f"T_days={time_period:.1f}_"
+            f"{cf.to_scale=}_"
             f".mp4"
         )
         ani.save(filename=file_name, writer=writer, dpi=dpi)
@@ -295,3 +301,66 @@ class TwoBodySystem:
         else:
             avg_rate = f"{1 / avg_iter_per_sec:.2f} sec/frame"
         print(f"{avg_iter_per_sec:.1f} frames/sec processed ({avg_rate})")   
+
+# ----- EXAMPLE USAGE OF THE CLASS ----- #
+
+def pluto_charon_system() -> None:
+    pluto_charon = TwoBodySystem(
+        params=SystemParams(
+            m1=M_PLUTO, 
+            m2=M_CHARON, 
+            d=D_PLUTO_CHARON, 
+            v0=V_CHARON, 
+            i_deg=i_CHARON, 
+            T_days=T_PLUTO_CHARON * 1.175 * 4,
+            rtol=1e-9, steps=1000
+        ),
+        config=PlotConfig(
+            body1_radius=R_PLUTO, 
+            body2_radius=R_CHARON,
+            figure_size=(10, 10),
+            figure_title="Pluto-Charon System (TO SCALE)",
+            body1_legend_label="Pluto", 
+            body2_legend_label="Charon",
+            body1_colour="tab:brown", 
+            body1_trail_colour="tab:brown",
+            body2_colour="tab:olive", 
+            body2_trail_colour="tab:olive",
+            max_axis_extent=1.15,
+            show_legend=True, 
+            to_scale=True, 
+            show_bc=True
+        )
+    )
+    # pluto_charon.plot_orbits2d()
+    pluto_charon.animate2d(
+        trail_length_pct=2,
+        trail_length_factor=3,
+        dpi=200
+    )
+
+
+def earth_moon_system() -> None:
+    earth_moon = TwoBodySystem(
+        params=SystemParams(
+            rtol=1e-9, 
+            steps=1000,
+            T_days=27.321 * 1.03 * 3,  
+        ),
+        config=PlotConfig(
+            figure_size=(10, 10),
+            figure_title="Earth-Moon System (TO SCALE)",
+            body1_legend_label="Earth", 
+            body2_legend_label="Moon",
+            max_axis_extent=1.05,
+            line_width=0.5,
+            to_scale=True, 
+            show_bc=False
+        )
+    )
+    # earth_moon.plot_orbits2d()
+    earth_moon.animate2d(
+        trail_length_pct=2,
+        trail_length_factor=4,
+        dpi=200
+    )
