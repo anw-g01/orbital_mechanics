@@ -11,9 +11,10 @@ from config import SystemParams, PlotConfig
 from typing import Optional, Tuple
 # configure matplotlib defaults
 plt.rcParams.update({
-    "font.size": 9,
+    "font.size": 8,
     "font.family": "monospace",
-    "lines.linewidth": 1
+    "lines.linewidth": 1,
+    "grid.color": (0.5, 0.5, 0.5, 0.1)    # 3D grid alpha 
 })
 
 
@@ -38,16 +39,17 @@ class TwoBodySystem:
 
     def _solve(self) -> None:
         """Numerically solve the ODEs for the two-body system using the provided parameters."""
+        p = self.params    # shorthand alias for the SystemParams instance
         # extract system parameters from the dataclass:
-        m1,m2, d, v0 = self.params.m1, self.params.m2, self.params.d, self.params.v0
-        i_deg, T_days, steps = self.params.i_deg, self.params.T_days, self.params.steps
-        ode_method, rtol, atol = self.params.ode_method, self.params.rtol, self.params.atol
+        m1,m2, d, v0 = p.m1, p.m2, p.d, p.v0
+        i_deg, T_days, steps = p.i_deg, p.T_days, p.steps
+        ode_method, rtol, atol = p.ode_method, p.rtol, p.atol
         # initial position vectors of mass 1 and mass 2:
         i_rad = np.radians(i_deg)   # convert inclination angle to radians
         r2_0 = np.array([d * np.cos(i_rad), 0.0, d * np.sin(i_rad)])      
         r1_0 = -m2/m1 * r2_0        # position vector of Earth (with barycentre at origin)                                     
         # initial velocity vectors:
-        v0 = np.array([0.0, v0, 0.0])
+        v0 = np.array([0.0, v0, 0])
         v1_0 = -m2/(m1 + m2) * v0
         v2_0 = m1/(m1 + m2) * v0
         # initial state vector, [r_e, v_e, r_m, v_m]:
@@ -305,7 +307,111 @@ class TwoBodySystem:
             avg_rate = f"{1 / avg_iter_per_sec:.2f} sec/frame"
         print(f"{avg_iter_per_sec:.1f} frames/sec processed ({avg_rate})")   
 
-# ----- EXAMPLE USAGE OF THE CLASS ----- #
+    def create_figure3d(
+        self, 
+        x_coords: Tuple[np.ndarray, np.ndarray],
+        y_coords: Tuple[np.ndarray, np.ndarray],
+        z_coords: Tuple[np.ndarray, np.ndarray],
+        elev0: int = 30,
+        azim0: int = -60
+    ) -> Tuple[plt.Figure, plt.Axes]:
+        """Setup a 3D base figure with axes for plotting the two-body system.
+        
+        Args:
+            `elev0` (`int`): initial elevation angle for the 3D view.
+            `azim0` (`int`): initial azimuthal angle for the 3D view.
+
+        Returns:
+            `fig` (`plt.Figure`): the created figure.
+            `ax` (`plt.Axes`): the axes for plotting.
+        """
+        cf = self.config    # shorthand alias for the PlotConfig instance
+        
+        # ----- 3D FIGURE SETUP ----- #
+        fig = plt.figure(figsize=cf.figure_size)
+        ax = fig.add_subplot(111, projection="3d")
+        if cf.figure_title:
+            ax.set_title(cf.figure_title)
+        ax.set_xlabel(r"$x$ ($m$)")
+        ax.set_ylabel(r"$y$ ($m$)")
+        ax.set_zlabel(r"$z$ ($m$)")
+        ax.xaxis.set_major_locator(MaxNLocator(cf.x_axis_max_ticks))
+        ax.yaxis.set_major_locator(MaxNLocator(cf.y_axis_max_ticks))
+        ax.zaxis.set_major_locator(MaxNLocator(cf.z_axis_max_ticks))
+        ax.set_box_aspect([1, 1, 1])    # set equal aspect ratio for all axes
+
+        # --- AXIS LIMITS --- #
+        all = np.concatenate((x_coords, y_coords, z_coords))
+        max_extent = cf.max_axis_extent * np.max(np.abs(all))    # calculate max extent based on coordinates
+        ax.set_xlim3d(-max_extent, max_extent)
+        ax.set_ylim3d(-max_extent, max_extent)
+        ax.set_zlim3d(-max_extent, max_extent)  # equal limits for equal aspect ratio 
+
+        # --- DASHED LINES --- #
+        if cf.draw_dashes3d:
+            x_dash = ax.plot([-max_extent, max_extent], [0, 0], [0, 0], linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
+            y_dash = ax.plot([0, 0], [-max_extent, max_extent], [0, 0], linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
+            z_dash = ax.plot([0, 0], [0, 0], [-max_extent, max_extent], linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
+            x_dash[0].set_dashes([10, 10]), y_dash[0].set_dashes([10, 10]), z_dash[0].set_dashes([10, 10])
+
+        # show barycentre marker (lies exactly at the origin):
+        if cf.show_bc:     
+            ax.scatter(0, 0, 0, marker="x", s=cf.bc_markersize, color=cf.bc_colour, label=cf.bc_legend_label, alpha=cf.bc_alpha)
+
+        # --- CAMERA VIEW ANGLE (ELEVATION & AZIMUTH) --- #
+        ax.view_init(elev=elev0, azim=azim0)    # set initial starting angles
+
+        return fig, ax
+
+
+    def plot_orbits3d(
+        self,
+        to_scale: bool = False,
+        body1_markersize3d: int = 500,
+        body2_markersize3d: int = 200,
+        show_legend: bool = False
+    ) -> None:
+        """
+        Plot the complete orbits of the two bodies in 3D.
+        
+        Args:
+            `to_scale` (`bool`): whether to show the bodies to scale.
+            `body1_markersize3d` (`int`): marker size for body 1 in 3D.
+            `body2_markersize3d` (`int`): marker size for body 2 in 3D.
+            `show_legend` (`bool`): whether to show the legend.
+
+        """
+        cf = self.config    # shorthand alias for the PlotConfig instance
+        
+        if self.t is None or self.Z is None:
+            print("Empty solutions, re-running ODE solver...")
+            t, Z = self.solve()
+        else:
+            t, Z = self.t, self.Z
+
+        r1, v1, r2, v2 = np.vsplit(Z, 4)            # unpack state vector (split along rows)
+        x1, y1, z1 = r1[0, :], r1[1, :], r1[2, :]   # unpack body 1 3D coordinates
+        x2, y2, z2 = r2[0, :], r2[1, :], r2[2, :]   # unpack body 2 3D coordinates
+
+        # ----- MAIN 3D FIGURE ----- #
+        fig, ax = self.create_figure3d((x1, x2), (y1, y2), (z1, z2))    # create a 3D base figure with axes
+
+        # --- PLOT FULL ORBIT TRAILS --- #
+        ax.plot(x1, y1, z1, color=cf.body1_trail_colour, linewidth=cf.line_width)
+        ax.plot(x2, y2, z2, color=cf.body2_trail_colour, linewidth=cf.line_width)
+
+        # --- ADD MARKERS --- #
+        if to_scale:    # show bodies to scale
+            pass
+        else:
+            ax.scatter(x1[-1], y1[-1], z1[-1], color=cf.body1_colour, s=body1_markersize3d, label=cf.body1_legend_label, zorder=5)
+            ax.scatter(x2[-1], y2[-1], z2[-1], color=cf.body2_colour, s=body2_markersize3d, label=cf.body2_legend_label, zorder=5)
+
+        if show_legend:
+            ax.legend()
+        fig.set_tight_layout(True)    # adjust layout to fit all elements
+        plt.show()
+
 
 def pluto_charon_system() -> None:
     """Simulate and animate the Pluto-Charon two-body system with realistic parameters."""
@@ -316,7 +422,7 @@ def pluto_charon_system() -> None:
             d=D_PLUTO_CHARON, 
             v0=V_CHARON, 
             i_deg=i_CHARON, 
-            T_days=T_PLUTO_CHARON * 1.175 * 4,
+            T_days=T_PLUTO_CHARON * 1.175 * 0.8,
             rtol=1e-9, steps=1000
         ),
         config=PlotConfig(
@@ -336,11 +442,16 @@ def pluto_charon_system() -> None:
             show_bc=True
         )
     )
-    # pluto_charon.plot_orbits2d()
-    pluto_charon.animate2d(
-        trail_length_pct=2,
-        trail_length_factor=3,
-        dpi=200
+
+    # pluto_charon.animate2d(
+    #     trail_length_pct=2,
+    #     trail_length_factor=3,
+    #     dpi=200
+    # )
+
+    pluto_charon.plot_orbits3d(
+        to_scale=False,
+        show_legend=True
     )
 
 
@@ -369,11 +480,14 @@ def earth_moon_system(exaggerated: bool = False) -> None:
                 show_bc=False
             )
         )
-        # earth_moon.plot_orbits2d()
-        earth_moon.animate2d(
-            trail_length_pct=2,
-            trail_length_factor=4,
-            dpi=200
+        # earth_moon.animate2d(
+        #     trail_length_pct=2,
+        #     trail_length_factor=4,
+        #     dpi=200
+        # )
+        earth_moon.plot_orbits3d(
+            to_scale=False,
+            show_legend=True
         )
     else:
         earth_moon = TwoBodySystem(
@@ -398,10 +512,14 @@ def earth_moon_system(exaggerated: bool = False) -> None:
                 show_bc=True, bc_alpha=0.8
             )
         )
-        earth_moon.animate2d(
-            trail_length_pct=2,
-            trail_length_factor=,
-            dpi=200
+        # earth_moon.animate2d(
+        #     trail_length_pct=2,
+        #     trail_length_factor=5,
+        #     dpi=200
+        # )
+        earth_moon.plot_orbits3d(
+            to_scale=False,
+            show_legend=True
         )
 
 
@@ -430,9 +548,12 @@ def equal_mass_system() -> None:
             show_bc=True, bc_alpha=0.8, bc_colour="tab:blue", bc_markersize=50            
         )
     )
-    # equal_mass.plot_orbits2d()
-    equal_mass.animate2d(
-        trail_length_pct=5,
-        trail_length_factor=1,
-        dpi=300
+    # equal_mass.animate2d(
+    #     trail_length_pct=5,
+    #     trail_length_factor=1,
+    #     dpi=300
+    # )
+    equal_mass.plot_orbits3d(
+        to_scale=False,
+        show_legend=True
     )

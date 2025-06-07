@@ -47,11 +47,15 @@ class PlotConfig:
     show_bc: bool = False
     bc_colour: str = "tab:red"
     bc_legend_label: str = "barycentre"
-    bc_alpha: float = 0.4
-    bc_markersize: int = 25
+    bc_alpha: float = 0.8
+    bc_markersize: int = 30
     # planetary body properties (defaults for Earth-Moon system)
     to_scale: bool = False
     body1_radius: float = R_EARTH
     body1_legend_label: Optional[str] = None
     body2_radius: float = R_MOON
     body2_legend_label: Optional[str] = None
+    # 3D plotting options
+    z_axis_limits: Optional[Tuple[float, float]] = None
+    z_axis_max_ticks: int = 5
+    draw_dashes3d: bool = True
