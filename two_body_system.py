@@ -1,7 +1,8 @@
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
+import matplotlib.lines as mlines
+import matplotlib.patches as mpatches
 from matplotlib.ticker import MaxNLocator
 from matplotlib.animation import FuncAnimation, FFMpegWriter
 import datetime
@@ -104,6 +105,7 @@ class TwoBodySystem:
         
         # ----- FIGURE SETUP ----- #
         fig, ax = plt.subplots(figsize=cf.figure_size)    # create a figure with specified size
+        ax.set_aspect("equal")    # ensure equal aspect ratio after setting limits
         if cf.figure_title:
             ax.set_title(cf.figure_title)
         ax.xaxis.set_major_locator(MaxNLocator(cf.x_axis_max_ticks))
@@ -122,20 +124,28 @@ class TwoBodySystem:
         if cf.display_baryc:     
             ax.scatter(0, 0, marker="x", s=cf.baryc_markersize, color=cf.baryc_colour, label=cf.baryc_legend_label, alpha=cf.baryc_alpha, zorder=10)
         
-        # --- AXIS LIMITS & LEGEND --- #
+        # --- AXIS LIMITS --- #
         if cf.x_axis_limits:
             ax.set_xlim(cf.x_axis_limits)
         else:
             x_all = np.concatenate(x_coords)    # (x1, x2)
-            x_extent = cf.max_axis_extent * np.max(np.abs(x_all))
+            x_extent = cf.max_axis_extent2d * np.max(np.abs(x_all))
             ax.set_xlim(-x_extent, x_extent)
         if cf.y_axis_limits:
             ax.set_ylim(cf.y_axis_limits)
         else:
             y_all = np.concatenate(y_coords)    # (y1, y2)
-            y_extent = cf.max_axis_extent * np.max(np.abs(y_all))
+            y_extent = cf.max_axis_extent2d * np.max(np.abs(y_all))
             ax.set_ylim(-y_extent, y_extent)
-        ax.set_aspect("equal")    # ensure equal aspect ratio after setting limits
+
+        # --- LEGEND --- #
+        if cf.display_legend:
+            # create proxy markers for legend (independent of actual plotted objects)
+            body1_legend = mlines.Line2D([], [], color=cf.body1_colour, marker='o', linestyle='None', markersize=6, label=cf.body1_legend_label)
+            body2_legend = mlines.Line2D([], [], color=cf.body2_colour, marker='o', linestyle='None', markersize=6, label=cf.body2_legend_label)
+            baryc_legend = mlines.Line2D([], [], color=cf.baryc_colour, marker='x', linestyle='None', markersize=6, label=cf.baryc_legend_label)
+            ax.legend(handles=[body1_legend, body2_legend, baryc_legend])
+        
         return fig, ax
 
     def plot_orbits2d(self) -> None:
@@ -161,15 +171,13 @@ class TwoBodySystem:
 
         # --- ADD MARKERS --- #
         if cf.to_scale:    # show bodies to scale
-            body1 = Circle((x1[-1], y1[-1]), radius=cf.body1_radius, color=cf.body1_colour, label=cf.body1_legend_label, zorder=5)
-            body2 = Circle((x2[-1], y2[-1]), radius=cf.body2_radius, color=cf.body2_colour, label=cf.body2_legend_label, zorder=5)
+            body1 = mpatches.Circle((x1[-1], y1[-1]), radius=cf.body1_radius, color=cf.body1_colour, label=cf.body1_legend_label, zorder=5)
+            body2 = mpatches.Circle((x2[-1], y2[-1]), radius=cf.body2_radius, color=cf.body2_colour, label=cf.body2_legend_label, zorder=5)
             ax.add_patch(body1), ax.add_patch(body2)
         else:
             ax.scatter(x1[-1], y1[-1], color=cf.body1_colour, s=cf.body1_markersize, zorder=5)
             ax.scatter(x2[-1], y2[-1], color=cf.body2_colour, s=cf.body2_markersize, zorder=5)
 
-        if cf.display_legend:
-            ax.legend()
         plt.show()
 
     def animate2d(
@@ -212,17 +220,14 @@ class TwoBodySystem:
 
         # --- PLOT ELEMENTS (TO BE UPDATED IN ANIMATION) --- #
         if cf.to_scale:    # show planetary bodies to scale
-            body1_marker = Circle((x1[0], y1[0]), radius=cf.body1_radius, color=cf.body1_colour, label=cf.body1_legend_label, zorder=5)
-            body2_marker = Circle((x2[0], y2[0]), radius=cf.body2_radius, color=cf.body2_colour, label=cf.body2_legend_label, zorder=5)
+            body1_marker = mpatches.Circle((x1[0], y1[0]), radius=cf.body1_radius, color=cf.body1_colour, label=cf.body1_legend_label, zorder=5)
+            body2_marker = mpatches.Circle((x2[0], y2[0]), radius=cf.body2_radius, color=cf.body2_colour, label=cf.body2_legend_label, zorder=5)
             ax.add_patch(body1_marker), ax.add_patch(body2_marker)
         else:
             body1_marker = ax.scatter([], [], color=cf.body1_colour, s=cf.body1_markersize, zorder=5)
             body2_marker = ax.scatter([], [], color=cf.body2_colour, s=cf.body2_markersize, zorder=5)
         body1_orbit, = ax.plot([], [], color=cf.body1_trail_colour, linewidth=cf.line_width)
         body2_orbit, = ax.plot([], [], color=cf.body2_trail_colour, linewidth=cf.line_width)
-
-        if cf.display_legend:
-            ax.legend()
 
         # --- PROGRESS BAR --- #
         pbar = tqdmFA(total=steps, fps=fps)
@@ -296,7 +301,7 @@ class TwoBodySystem:
         cf, cf_3d = self.config, self.config_3d    # shorthand alias for the PlotConfig instances
 
         # ----- 3D FIGURE SETUP ----- #
-        fig = plt.figure(figsize=cf.figure_size)
+        fig = plt.figure(figsize=cf_3d.figure_size)
         ax = fig.add_subplot(111, projection="3d")
         if cf_3d.figure_title:
             ax.set_title(cf_3d.figure_title)
@@ -310,7 +315,7 @@ class TwoBodySystem:
 
         # --- AXIS LIMITS --- #
         all = np.concatenate((x_coords, y_coords, z_coords))
-        max_extent = cf.max_axis_extent * np.max(np.abs(all))    # calculate max extent based on coordinates
+        max_extent = cf_3d.max_axis_extent3d * np.max(np.abs(all))    # calculate max extent based on coordinates
         ax.set_xlim3d(-max_extent, max_extent)
         ax.set_ylim3d(-max_extent, max_extent)
         ax.set_zlim3d(-max_extent, max_extent)  # equal limits for equal aspect ratio 
@@ -325,29 +330,18 @@ class TwoBodySystem:
         # show barycentre marker (lies exactly at the origin):
         if cf_3d.display_baryc:     
             ax.scatter(0, 0, 0, marker="x", s=cf_3d.baryc_markersize, color=cf.baryc_colour, label=cf.baryc_legend_label, alpha=cf.baryc_alpha)
+    
+        if cf_3d.display_legend:
+            # Create proxy markers for legend (independent of actual plotted objects)
+            body1_legend = mlines.Line2D([], [], color=cf.body1_colour, marker='o', linestyle='None', markersize=6, label=cf.body1_legend_label)
+            body2_legend = mlines.Line2D([], [], color=cf.body2_colour, marker='o', linestyle='None', markersize=6, label=cf.body2_legend_label)
+            baryc_legend = mlines.Line2D([], [], color=cf.baryc_colour, marker='x', linestyle='None', markersize=6, label=cf.baryc_legend_label)
+            ax.legend(handles=[body1_legend, body2_legend, baryc_legend])
 
         # --- CAMERA VIEW ANGLE (ELEVATION & AZIMUTH) --- #
         ax.view_init(elev=cf_3d.elev_start, azim=cf_3d.azim_start)    # set initial starting angles
 
         return fig, ax
-
-    def _draw_sphere(
-        self,
-        ax: Axes3D,
-        center: Tuple[float, float, float],
-        radius: float,
-        colour: str = "tab:blue",
-        alpha: float = 1,
-        resolution: int = 30
-    ) -> Poly3DCollection:
-        """Draw a sphere in 3D space on the given axes."""
-        c, r = center, radius
-        u = np.linspace(0, 2 * np.pi, resolution)               # azimuthal angles
-        v = np.linspace(0, np.pi, resolution)                   # polar angles
-        x = c[0] + r * np.outer(np.cos(u), np.sin(v))           # x-coordinates
-        y = c[1] + r * np.outer(np.sin(u), np.sin(v))           # y-coordinates
-        z = c[2] + r * np.outer(np.ones(u.shape), np.cos(v))    # z-coordinates
-        return ax.plot_surface(x, y, z, color=colour, alpha=alpha, rstride=1, cstride=1, linewidth=0.0, antialiased=False)
 
     def plot_orbits3d(self) -> None:
         """Plot the complete orbits of the two bodies in 3D."""
@@ -372,15 +366,14 @@ class TwoBodySystem:
         ax.plot(x2, y2, z2, color=cf.body2_trail_colour, linewidth=cf.line_width)
 
         # --- ADD MARKERS --- #
-        if cf_3d.markers_to_scale:    # show bodies to scale
-            self._draw_sphere(ax, (x1[-1], y1[-1], z1[-1]), cf.body1_radius, colour=cf.body1_colour, alpha=cf_3d.sphere_alpha, resolution=cf_3d.sphere_res)
-            self._draw_sphere(ax, (x2[-1], y2[-1], z2[-1]), cf.body2_radius, colour=cf.body2_colour, alpha=cf_3d.sphere_alpha, resolution=cf_3d.sphere_res)
+        if cf_3d.markers_to_relative_scale:    # show bodies to scale
+            # relative scale of marker2 size based on defined marker1 size
+            size2 = cf_3d.body1_markersize * (cf.body2_radius / cf.body1_radius) ** 2    # scale by the square of the radius ratio
         else:
-            ax.scatter(x1[-1], y1[-1], z1[-1], color=cf.body1_colour, s=cf_3d.body1_markersize3d, label=cf.body1_legend_label, zorder=5)
-            ax.scatter(x2[-1], y2[-1], z2[-1], color=cf.body2_colour, s=cf_3d.body2_markersize3d, label=cf.body2_legend_label, zorder=5)
+            size2 = cf_3d.body1_markersize
+        ax.scatter(x1[-1], y1[-1], z1[-1], color=cf.body1_colour, s=cf_3d.body1_markersize, label=cf.body1_legend_label, zorder=5)
+        ax.scatter(x2[-1], y2[-1], z2[-1], color=cf.body2_colour, s=size2, label=cf.body2_legend_label, zorder=5)
 
-        if cf_3d.display_legend:
-            ax.legend()
         fig.set_tight_layout(True)    # adjust layout to fit all elements
         plt.show()
 
@@ -422,16 +415,15 @@ class TwoBodySystem:
         fig, ax = self.create_figure3d((x1, x2), (y1, y2), (z1, z2)) 
 
         # --- PLOT ELEMENTS (TO BE UPDATED IN ANIMATION) --- #
-        if cf_3d.markers_to_scale:    # show planetary bodies to scale
-            body1_marker = self._draw_sphere(ax, (x1[0], y1[0], z1[0]), cf.body1_radius, colour=cf.body1_colour, alpha=cf_3d.sphere_alpha, resolution=cf_3d.sphere_res)
-            body2_marker = self._draw_sphere(ax, (x2[0], y2[0], z2[0]), cf.body2_radius, colour=cf.body2_colour, alpha=cf_3d.sphere_alpha, resolution=cf_3d.sphere_res)
+        if cf_3d.markers_to_relative_scale:    # show planetary bodies to scale
+            # relative scale of marker2 size based on defined marker1 size
+            size2 = cf_3d.body1_markersize * (cf.body2_radius / cf.body1_radius) ** 2    # scale by the square of the radius ratio
         else:
-            body1_marker = ax.scatter(x1[0], y1[0], z1[0], color=cf.body1_colour, s=cf_3d.body1_markersize3d, label=cf.body1_legend_label, zorder=5)
-            body2_marker = ax.scatter(x2[0], y2[0], z2[0], color=cf.body2_colour, s=cf_3d.body2_markersize3d, label=cf.body2_legend_label, zorder=5)
+            size2 = cf_3d.body1_markersize
+        body1_marker = ax.scatter(x1[0], y1[0], z1[0], color=cf.body1_colour, s=cf_3d.body1_markersize, label=cf.body1_legend_label, zorder=5)
+        body2_marker = ax.scatter(x2[0], y2[0], z2[0], color=cf.body2_colour, s=size2, label=cf.body2_legend_label, zorder=5)
         body1_orbit, = ax.plot([], [], [], color=cf.body1_trail_colour, linewidth=cf.line_width)
         body2_orbit, = ax.plot([], [], [], color=cf.body2_trail_colour, linewidth=cf.line_width)
-        if cf_3d.display_legend:
-            ax.legend()    # update and display legend
 
         # --- PROGRESS BAR --- #
         pbar = tqdmFA(total=steps, fps=fps)
@@ -439,7 +431,7 @@ class TwoBodySystem:
         # ----- ANIMATION FUNCTION SETUP ----- #
         def _init() -> tuple:
             body1_orbit.set_data([], []), body2_orbit.set_data([], [])
-            if cf_3d.markers_to_scale:    
+            if cf_3d.markers_to_relative_scale:    
                 body1_marker.center = (x1[0], y1[0], z1[0])
                 body2_marker.center = (x2[0], y2[0], z2[0])
             else:
@@ -448,21 +440,22 @@ class TwoBodySystem:
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
         def _update(frame) -> tuple:
-            """Update orbit trails and marker positions."""
+            """Update orbit trails, marker positions and camera panning if toggled."""
             i0 = max(0, frame - trail_length)                                       # start index for the trail
             i0_1 = max(0, frame - int(trail_length * cf.trail_length_factor))       # longer trail for body 1
             body1_orbit.set_data_3d(x1[i0_1:frame], y1[i0_1:frame], z1[i0_1:frame])    # update orbit trail
             body2_orbit.set_data_3d(x2[i0:frame], y2[i0:frame], z2[i0:frame])
             # update markers:
-            nonlocal body1_marker, body2_marker    # use nonlocal to modify outer scope variables
-            if cf_3d.markers_to_scale:
-                # remove old spheres and create new ones (TIME CONSUMING & NOT RECOMMENDED):
-                body1_marker.remove(), body2_marker.remove()
-                body1_marker = self._draw_sphere(ax, (x1[frame], y1[frame], z1[frame]), cf.body1_radius, colour=cf.body1_colour, alpha=cf_3d.sphere_alpha, resolution=cf_3d.sphere_res)
-                body2_marker = self._draw_sphere(ax, (x2[frame], y2[frame], z2[frame]), cf.body2_radius, colour=cf.body2_colour, alpha=cf_3d.sphere_alpha, resolution=cf_3d.sphere_res)
-            else:
-                body1_marker._offsets3d = ([x1[frame]], [y1[frame]], [z1[frame]])
-                body2_marker._offsets3d = ([x2[frame]], [y2[frame]], [z2[frame]])
+            body1_marker._offsets3d = ([x1[frame]], [y1[frame]], [z1[frame]])
+            body2_marker._offsets3d = ([x2[frame]], [y2[frame]], [z2[frame]])
+            # camera panning:
+            if cf_3d.camera_pan:
+                a0, a1 = cf_3d.azim_start, cf_3d.azim_end
+                e0, e1 = cf_3d.elev_start, cf_3d.elev_end
+                # update only if the end angles are specified
+                a_next = a0 + (a1 - a0) * frame / steps if a1 is not None else a0     # 'not None' otherwise 0 is False
+                e_next = e0 + (e1 - e0) * frame / steps if e1 is not None else e0
+                ax.view_init(elev=e_next, azim=a_next)
             pbar.update(1)
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
@@ -477,12 +470,12 @@ class TwoBodySystem:
         file_name = (
             f"3D_{name1.lower()}-{name2.lower()}_"
             f"{dpi=}_"
-            f"(elev0={cf_3d.elev_start}, azim0={cf_3d.azim_start})_"
+            f"(elev0={cf_3d.elev_start},azim0={cf_3d.azim_start})_"
             f"(elev_end={cf_3d.elev_end},azim_end={cf_3d.azim_end})_"
             f"{cf.trail_length_pct:.0f}%trail(factor={cf.trail_length_factor})_"
             f"{steps=:,.0f}_"
             f"T_days={time_period:.1f}_"
-            f"{cf_3d.markers_to_scale=}_"
+            f"to_scale={cf_3d.markers_to_relative_scale}_"
             f".mp4"
         )
         ani.save(filename=file_name, writer=writer, dpi=dpi)
@@ -509,7 +502,8 @@ def pluto_charon_system() -> None:
             m2=M_CHARON, 
             d=D_PLUTO_CHARON, 
             v0=V_CHARON, 
-            i_deg=i_CHARON, 
+            i_deg=i_CHARON,     # high inclination angle will obscure the 2D view orbit (set to 0 to see flat)
+            # i_deg=0,            # inclination angle (0 for a flat head-on view orbit)
             T_days=T_PLUTO_CHARON * 1.175 * 4,
             rtol=1e-9, steps=750
         ),
@@ -524,28 +518,31 @@ def pluto_charon_system() -> None:
             body1_trail_colour="tab:brown",
             body2_colour="tab:olive", 
             body2_trail_colour="tab:olive",
-            trail_length_pct=2,
+            baryc_colour="tab:blue",    # barycentre colour
+            display_baryc=True,
+            max_axis_extent2d=1.15,
+            trail_length_pct=6,
             trail_length_factor=3,
-            max_axis_extent=1,
             display_legend=True, 
             to_scale=True, 
-            display_baryc=True
         )
     )
-
+    # pluto_charon.plot_orbits2d()    # plot the complete orbits in 2D
     # pluto_charon.animate2d(dpi=200)    # create animation with 2D figure
 
     # setup 3D plot configuration dataclass:
     pluto_charon.config_3d = PlotConfig3D(
-        figure_title="3D Pluto-Charon System (TO SCALE)",
-        markers_to_scale=True,
-        # if markers_to_scale=False:
-        body1_markersize=600,    
-        body2_markersize=200,
-        elev_start=20, azim_start=-20,
+        markers_to_relative_scale=True,         # not recommened to use spheres for drawing (set False)
+        body1_markersize=500,                   # size of body2 is scaled if markers_to_relative_scale=True
+        max_axis_extent3d=1,
         # camera panning during animation:
-        camera_pan=False,
-        elev_end=None, azim_end=-70,
+        elev_start=20, azim_start=-30,
+        camera_pan=True,
+        elev_end=10, azim_end=-80,
+        # title and legend:
+        # figure_title="3D Pluto-Charon System",
+        figure_size=(10, 10),
+        display_legend=False
     )
     # pluto_charon.plot_orbits3d()
 
@@ -566,7 +563,7 @@ def earth_moon_system(exaggerated: bool = False) -> None:
                 figure_title="Earth-Moon System (TO SCALE)",
                 body1_legend_label="Earth", 
                 body2_legend_label="Moon",
-                max_axis_extent=1.05,
+                max_axis_extent2d=1.05,
                 line_width=0.5,
                 to_scale=True, 
                 display_baryc=False,
@@ -591,7 +588,7 @@ def earth_moon_system(exaggerated: bool = False) -> None:
                 body1_legend_label="Earth'", body2_legend_label="Moon'",
                 body1_colour="tab:blue", body1_trail_colour="tab:blue",
                 body2_colour="tab:red", body2_trail_colour="tab:red",
-                max_axis_extent=1.4, 
+                max_axis_extent2d=1.4, 
                 x_axis_limits=(-1e7, 4.5e7),
                 display_legend=True, 
                 to_scale=False, 
@@ -624,7 +621,7 @@ def equal_mass_system() -> None:
             body1_colour="tab:red", body1_trail_colour="tab:red",
             body2_colour="tab:green", body2_trail_colour="tab:green",
             figure_size=(10, 10), figure_title="Equal Mass Two-Body System",
-            max_axis_extent=1.1, y_axis_limits=(-2.5e8, 2.5e8),
+            max_axis_extent2d=1.1, y_axis_limits=(-2.5e8, 2.5e8),
             to_scale=True, display_legend=True,
             display_baryc=True, baryc_alpha=0.8, baryc_colour="tab:blue", baryc_markersize=50,            
             trail_length_pct=5, trail_length_factor=1
