@@ -48,6 +48,7 @@ class PlotConfig:
     # display options:
     display_time: bool = True
     time_text_pos: Tuple[float, float] = (0.04, 0.95)
+    time_dp: int = 1
     display_legend: bool = False
     display_baryc: bool = False
     baryc_colour: str = "tab:red"

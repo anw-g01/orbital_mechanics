@@ -184,7 +184,7 @@ class TwoBodySystem:
             xpos, ypos = cf.time_text_pos
             ax.text(
                 xpos, ypos,   # position in axes coordinates (0, 0) bottom left, (1, 1) top right
-                f"T = {self.t_days[-1]:.1f} days", 
+                f"T = {self.t_days[-1]:.{cf.time_dp}f} days", 
                 transform=ax.transAxes,    # map coordinates from axes to figure coordinates
                 fontsize=cf.title_fontsize - 1,
             )     
@@ -275,7 +275,7 @@ class TwoBodySystem:
                 body2_marker.set_offsets([[x2[frame], y2[frame]]])
             # update current time step text display if toggled:
             if cf.display_time:
-                time_text.set_text(f"T = {self.t_days[frame]:.1f} days")
+                time_text.set_text(f"T = {self.t_days[frame]:.{cf.time_dp}f} days")
             pbar.update(1)    # update tqdm progress bar
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
@@ -400,7 +400,7 @@ class TwoBodySystem:
             xpos, ypos = cf_3d.time_text_pos
             ax.text2D(
                 xpos, ypos,   # position in axes coordinates (0, 0) bottom left, (1, 1) top right
-                f"T = {self.t_days[-1]:.1f} days", 
+                f"T = {self.t_days[-1]:.{cf.time_dp}f} days", 
                 transform=ax.transAxes,    # map coordinates from axes to figure coordinates
                 fontsize=cf.title_fontsize - 1,
             )
@@ -472,7 +472,7 @@ class TwoBodySystem:
                 body1_marker._offsets3d = ([x1[0]], [y1[0]], [z1[0]])
                 body2_marker._offsets3d = ([x2[0]], [y2[0]], [z2[0]])
             if cf_3d.display_time:
-                time_text.set_text(f"T = {self.t_days[0]:.1f} days")            # set initial time text
+                time_text.set_text(f"T = {self.t_days[0]:.{cf.time_dp}f} days")            # set initial time text
             ax.view_init(elev=cf_3d.elev_start, azim=cf_3d.azim_start)      # set initial camera angles
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
@@ -495,7 +495,7 @@ class TwoBodySystem:
                 ax.view_init(elev=e_next, azim=a_next)
             # update current time step text display if toggled:
             if cf_3d.display_time:
-                time_text.set_text(f"T = {self.t_days[frame]:.1f} days")
+                time_text.set_text(f"T = {self.t_days[frame]:.{cf.time_dp}f} days")
             pbar.update(1)
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
@@ -569,7 +569,7 @@ def pluto_charon_system() -> None:
     )
     # setup 3D plot configuration dataclass:
     pluto_charon.config_3d = PlotConfig3D(
-        markers_to_relative_scale=True,         # not recommened to use spheres for drawing (set False)
+        markers_to_relative_scale=True,         
         body1_markersize=500,                   # size of body2 is scaled if markers_to_relative_scale=True
         max_axis_extent3d=1,
         # camera panning during animation:
@@ -589,6 +589,55 @@ def pluto_charon_system() -> None:
     # create 2D and 3D animations:
     pluto_charon.animate2d(dpi=200)     # 2D
     pluto_charon.animate3d(dpi=200)     # 3D
+
+
+def equal_mass_system() -> None:
+    """Simulate and animate a two-body system with equal masses."""
+    mass = M_EARTH              # use Earth mass for both bodies
+    radius = R_EARTH            # use Earth radius for both bodies (if to scale)
+    distance = D_EARTH_MOON     # use Earth-Moon distance
+    equal_mass = TwoBodySystem(
+        params=SystemParams(
+            m1=mass, m2=mass, d=distance, 
+            v0=600, 
+            i_deg=10, 
+            T_days=26 * 3,
+            rtol=1e-9, 
+            steps=600
+        ),
+        config=PlotConfig(
+            body1_radius=radius * 1.5, body2_radius=radius * 1.5,
+            body1_colour="tab:red", body1_trail_colour="tab:red",
+            body2_colour="tab:green", body2_trail_colour="tab:green",
+            figure_size=(10, 10), max_axis_extent2d=1.1, y_axis_limits=(-2.5e8, 2.5e8),
+            to_scale=True, display_legend=False,
+            display_baryc=True, baryc_colour="tab:blue",          
+            trail_length_pct=8, 
+            trail_length_factor=1,
+            time_dp=0,    # no decimal places for time text
+        )
+    )
+    # setup 3D plot configuration dataclass:
+    equal_mass.config_3d = PlotConfig3D(
+        markers_to_relative_scale=True,         # not recommened to use spheres for drawing (set False)
+        body1_markersize=200,                   # size of body2 is scaled if markers_to_relative_scale=True
+        max_axis_extent3d=1,
+        # camera panning during animation:
+        elev_start=20, azim_start=-30,
+        camera_pan=True,
+        elev_end=50, azim_end=-75,
+        # title and legend:
+        figure_size=(10, 10),
+        display_legend=False,
+    )
+
+    # plot only the complete orbits in 2D and 3D:
+    # equal_mass.plot_orbits2d()        # 2D
+    # equal_mass.plot_orbits3d()        # 3D
+
+    # create 2D and 3D animations:
+    equal_mass.animate2d(dpi=300)    # create animation with 2D figure
+    equal_mass.animate3d(dpi=300)    # create animation with 3D figure
 
 
 def earth_moon_system(exaggerated: bool = False) -> None:
@@ -641,32 +690,3 @@ def earth_moon_system(exaggerated: bool = False) -> None:
             )
         )
         earth_moon.animate2d(dpi=200)    # create animation with 2D figure
-
-
-def equal_mass_system() -> None:
-    """Simulate and animate a two-body system with equal masses."""
-    mass = M_EARTH              # use Earth mass for both bodies
-    radius = R_EARTH            # use Earth radius for both bodies (if to scale)
-    distance = D_EARTH_MOON     # use Earth-Moon distance
-    orbits = 3                  # number of orbits (roughly) to simulate
-    equal_mass = TwoBodySystem(
-        params=SystemParams(
-            m1=mass, m2=mass, d=distance, 
-            v0=600, 
-            i_deg=10, 
-            T_days=26 * orbits,
-            rtol=1e-9, 
-            steps=750
-        ),
-        config=PlotConfig(
-            body1_radius=radius, body2_radius=radius,
-            body1_colour="tab:red", body1_trail_colour="tab:red",
-            body2_colour="tab:green", body2_trail_colour="tab:green",
-            figure_size=(10, 10), figure_title="Equal Mass Two-Body System",
-            max_axis_extent2d=1.1, y_axis_limits=(-2.5e8, 2.5e8),
-            to_scale=True, display_legend=True,
-            display_baryc=True, baryc_alpha=0.8, baryc_colour="tab:blue", baryc_markersize=50,            
-            trail_length_pct=5, trail_length_factor=1
-        )
-    )
-    equal_mass.animate2d(dpi=200)    # create animation with 2D figure
