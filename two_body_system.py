@@ -107,7 +107,7 @@ class TwoBodySystem:
         fig, ax = plt.subplots(figsize=cf.figure_size)    # create a figure with specified size
         ax.set_aspect("equal")    # ensure equal aspect ratio after setting limits
         if cf.figure_title:
-            ax.set_title(cf.figure_title)
+            ax.set_title(cf.figure_title, fontdict={"fontsize": cf.title_fontsize})
         ax.xaxis.set_major_locator(MaxNLocator(cf.x_axis_max_ticks))
         ax.yaxis.set_major_locator(MaxNLocator(cf.y_axis_max_ticks))
         ax.set_xlabel(r"$x$ ($m$)")
@@ -178,6 +178,18 @@ class TwoBodySystem:
             ax.scatter(x1[-1], y1[-1], color=cf.body1_colour, s=cf.body1_markersize, zorder=5)
             ax.scatter(x2[-1], y2[-1], color=cf.body2_colour, s=cf.body2_markersize, zorder=5)
 
+        # --- TEXT: CURRENT TIME STEP (DAYS) --- #
+        if cf.display_time:
+            self.t_days = self.t / (24 * 60 * 60)
+            xpos, ypos = cf.time_text_pos
+            ax.text(
+                xpos, ypos,   # position in axes coordinates (0, 0) bottom left, (1, 1) top right
+                f"T = {self.t_days[-1]:.1f} days", 
+                transform=ax.transAxes,    # map coordinates from axes to figure coordinates
+                fontsize=cf.title_fontsize - 1,
+            )     
+
+        fig.set_tight_layout(True)    # adjust layout to fit all elements
         plt.show()
 
     def animate2d(
@@ -228,12 +240,15 @@ class TwoBodySystem:
             body2_marker = ax.scatter([], [], color=cf.body2_colour, s=cf.body2_markersize, zorder=5)
         body1_orbit, = ax.plot([], [], color=cf.body1_trail_colour, linewidth=cf.line_width)
         body2_orbit, = ax.plot([], [], color=cf.body2_trail_colour, linewidth=cf.line_width)
+        if cf.display_time:
+            xpos, ypos = cf.time_text_pos
+            time_text = ax.text(xpos, ypos, "", transform=ax.transAxes, fontsize=cf.title_fontsize-1)
 
         # --- PROGRESS BAR --- #
         pbar = tqdmFA(total=steps, fps=fps)
 
         # ----- ANIMATION FUNCTION SETUP ----- #
-        def _init() -> Tuple[plt.Lines2D, plt.Lines2D, Union[plt.Circle, plt.PathCollection], Union[plt.Circle, plt.PathCollection]]:
+        def _init() -> tuple:
             body1_orbit.set_data([], [])
             body2_orbit.set_data([], [])
             if cf.to_scale:
@@ -242,20 +257,25 @@ class TwoBodySystem:
             else:
                 body1_marker.set_offsets([[x1[0], y1[0]]])
                 body2_marker.set_offsets([[x2[0], y2[0]]])
+            time_text.set_text(f"T = {self.t_days[0]:.1f} days")    # set initial time text
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
         def _update(frame) -> tuple:
-            """Update orbit trails and marker positions."""
+            # update orbit trails:
             i0 = max(0, frame - trail_length)    # start index for the trail
             i0_1 = max(0, frame - int(trail_length * cf.trail_length_factor))      # longer trail for body 1
             body1_orbit.set_data(x1[i0_1: frame + 1], y1[i0_1: frame + 1])      # update orbit trail
             body2_orbit.set_data(x2[i0: frame + 1], y2[i0: frame + 1])
+            # update markers:
             if cf.to_scale:
                 body1_marker.center = (x1[frame], y1[frame])    # update matplotlib.patches.Circle position
                 body2_marker.center = (x2[frame], y2[frame])
             else:
                 body1_marker.set_offsets([[x1[frame], y1[frame]]])    # update scatter marker position
                 body2_marker.set_offsets([[x2[frame], y2[frame]]])
+            # update current time step text display if toggled:
+            if cf.display_time:
+                time_text.set_text(f"T = {self.t_days[frame]:.1f} days")
             pbar.update(1)    # update tqdm progress bar
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
@@ -304,7 +324,7 @@ class TwoBodySystem:
         fig = plt.figure(figsize=cf_3d.figure_size)
         ax = fig.add_subplot(111, projection="3d")
         if cf_3d.figure_title:
-            ax.set_title(cf_3d.figure_title)
+            ax.set_title(cf_3d.figure_title, fontdict={"fontsize": cf.title_fontsize})
         ax.set_xlabel(r"$x$ ($m$)")
         ax.set_ylabel(r"$y$ ($m$)")
         ax.set_zlabel(r"$z$ ($m$)")
@@ -374,6 +394,17 @@ class TwoBodySystem:
         ax.scatter(x1[-1], y1[-1], z1[-1], color=cf.body1_colour, s=cf_3d.body1_markersize, label=cf.body1_legend_label, zorder=5)
         ax.scatter(x2[-1], y2[-1], z2[-1], color=cf.body2_colour, s=size2, label=cf.body2_legend_label, zorder=5)
 
+        # --- TEXT: CURRENT TIME STEP (DAYS) --- #
+        if cf_3d.display_time:
+            self.t_days = self.t / (24 * 60 * 60)
+            xpos, ypos = cf_3d.time_text_pos
+            ax.text2D(
+                xpos, ypos,   # position in axes coordinates (0, 0) bottom left, (1, 1) top right
+                f"T = {self.t_days[-1]:.1f} days", 
+                transform=ax.transAxes,    # map coordinates from axes to figure coordinates
+                fontsize=cf.title_fontsize - 1,
+            )
+
         fig.set_tight_layout(True)    # adjust layout to fit all elements
         plt.show()
 
@@ -424,6 +455,9 @@ class TwoBodySystem:
         body2_marker = ax.scatter(x2[0], y2[0], z2[0], color=cf.body2_colour, s=size2, label=cf.body2_legend_label, zorder=5)
         body1_orbit, = ax.plot([], [], [], color=cf.body1_trail_colour, linewidth=cf.line_width)
         body2_orbit, = ax.plot([], [], [], color=cf.body2_trail_colour, linewidth=cf.line_width)
+        if cf_3d.display_time:
+            xpos, ypos = cf_3d.time_text_pos
+            time_text = ax.text2D(xpos, ypos, "", transform=ax.transAxes, fontsize=cf.title_fontsize-1)
 
         # --- PROGRESS BAR --- #
         pbar = tqdmFA(total=steps, fps=fps)
@@ -437,10 +471,13 @@ class TwoBodySystem:
             else:
                 body1_marker._offsets3d = ([x1[0]], [y1[0]], [z1[0]])
                 body2_marker._offsets3d = ([x2[0]], [y2[0]], [z2[0]])
+            if cf_3d.display_time:
+                time_text.set_text(f"T = {self.t_days[0]:.1f} days")            # set initial time text
+            ax.view_init(elev=cf_3d.elev_start, azim=cf_3d.azim_start)      # set initial camera angles
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
         def _update(frame) -> tuple:
-            """Update orbit trails, marker positions and camera panning if toggled."""
+            # update orbit trails:
             i0 = max(0, frame - trail_length)                                       # start index for the trail
             i0_1 = max(0, frame - int(trail_length * cf.trail_length_factor))       # longer trail for body 1
             body1_orbit.set_data_3d(x1[i0_1:frame], y1[i0_1:frame], z1[i0_1:frame])    # update orbit trail
@@ -452,10 +489,13 @@ class TwoBodySystem:
             if cf_3d.camera_pan:
                 a0, a1 = cf_3d.azim_start, cf_3d.azim_end
                 e0, e1 = cf_3d.elev_start, cf_3d.elev_end
-                # update only if the end angles are specified
+                # update only if the end angles are specified:
                 a_next = a0 + (a1 - a0) * frame / steps if a1 is not None else a0     # 'not None' otherwise 0 is False
                 e_next = e0 + (e1 - e0) * frame / steps if e1 is not None else e0
                 ax.view_init(elev=e_next, azim=a_next)
+            # update current time step text display if toggled:
+            if cf_3d.display_time:
+                time_text.set_text(f"T = {self.t_days[frame]:.1f} days")
             pbar.update(1)
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
@@ -470,8 +510,8 @@ class TwoBodySystem:
         file_name = (
             f"3D_{name1.lower()}-{name2.lower()}_"
             f"{dpi=}_"
-            f"(elev0={cf_3d.elev_start},azim0={cf_3d.azim_start})_"
-            f"(elev_end={cf_3d.elev_end},azim_end={cf_3d.azim_end})_"
+            f"(e0={cf_3d.elev_start},a0={cf_3d.azim_start})to"
+            f"(ef={cf_3d.elev_end},af={cf_3d.azim_end})_"
             f"{cf.trail_length_pct:.0f}%trail(factor={cf.trail_length_factor})_"
             f"{steps=:,.0f}_"
             f"T_days={time_period:.1f}_"
@@ -502,16 +542,16 @@ def pluto_charon_system() -> None:
             m2=M_CHARON, 
             d=D_PLUTO_CHARON, 
             v0=V_CHARON, 
-            i_deg=i_CHARON,     # high inclination angle will obscure the 2D view orbit (set to 0 to see flat)
-            # i_deg=0,            # inclination angle (0 for a flat head-on view orbit)
+            i_deg=360 - i_CHARON,     # high inclination angle will obscure the 2D view orbit (set to 0 to see flat)
+            # i_deg=0,    # inclination angle (0 for a flat head-on view orbit)
             T_days=T_PLUTO_CHARON * 1.175 * 4,
             rtol=1e-9, steps=750
         ),
         config=PlotConfig(
             body1_radius=R_PLUTO, 
             body2_radius=R_CHARON,
-            figure_size=(10, 10),
-            figure_title="2D Pluto-Charon System (TO SCALE)",
+            figure_size=(8, 8),
+            figure_title="2D Pluto-Charon System - Flat Orbit (TO SCALE)",
             body1_legend_label="Pluto", 
             body2_legend_label="Charon",
             body1_colour="tab:brown", 
@@ -520,33 +560,35 @@ def pluto_charon_system() -> None:
             body2_trail_colour="tab:olive",
             baryc_colour="tab:blue",    # barycentre colour
             display_baryc=True,
-            max_axis_extent2d=1.15,
+            max_axis_extent2d=1.1,
             trail_length_pct=6,
             trail_length_factor=3,
             display_legend=True, 
             to_scale=True, 
         )
     )
-    # pluto_charon.plot_orbits2d()    # plot the complete orbits in 2D
-    # pluto_charon.animate2d(dpi=200)    # create animation with 2D figure
-
     # setup 3D plot configuration dataclass:
     pluto_charon.config_3d = PlotConfig3D(
         markers_to_relative_scale=True,         # not recommened to use spheres for drawing (set False)
         body1_markersize=500,                   # size of body2 is scaled if markers_to_relative_scale=True
         max_axis_extent3d=1,
         # camera panning during animation:
-        elev_start=20, azim_start=-30,
+        elev_start=20, azim_start=-75,
         camera_pan=True,
-        elev_end=10, azim_end=-80,
+        elev_end=10, azim_end=-30,
         # title and legend:
         # figure_title="3D Pluto-Charon System",
         figure_size=(10, 10),
         display_legend=False
     )
-    # pluto_charon.plot_orbits3d()
 
-    pluto_charon.animate3d(dpi=100)
+    # plot only the complete orbits in 2D and 3D:
+    # pluto_charon.plot_orbits2d()        # 2D
+    # pluto_charon.plot_orbits3d()        # 3D
+
+    # create 2D and 3D animations:
+    pluto_charon.animate2d(dpi=200)     # 2D
+    pluto_charon.animate3d(dpi=200)     # 3D
 
 
 def earth_moon_system(exaggerated: bool = False) -> None:

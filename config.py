@@ -25,6 +25,7 @@ class PlotConfig:
     # figure properties:
     figure_size: Tuple[int, int] = (10, 10)
     figure_title: Optional[str]  = None
+    title_fontsize: int = 10
     grid_alpha: float = 0.15
     dashed_line_alpha: float = 0.1
     dashed_line_width: float = 0.8
@@ -45,12 +46,14 @@ class PlotConfig:
     trail_length_pct: int = 10  
     trail_length_factor: float = 3.0
     # display options:
+    display_time: bool = True
+    time_text_pos: Tuple[float, float] = (0.04, 0.95)
     display_legend: bool = False
     display_baryc: bool = False
     baryc_colour: str = "tab:red"
     baryc_legend_label: str = "Barycentre"
     baryc_alpha: float = 0.8
-    baryc_markersize: int = 30
+    baryc_markersize: int = 12
     # planetary body properties (defaults for Earth-Moon system):
     to_scale: bool = False
     body1_radius: float = R_EARTH
@@ -67,18 +70,21 @@ class PlotConfig3D():
     figure_size: Tuple[int, int] = (10, 10)
     body1_markersize: int = 600
     body2_markersize: int = 200
-    display_legend: bool = False
-    display_baryc: bool = True
-    baryc_markersize: int = 20
-    # if markers are to scale:
-    markers_to_relative_scale: bool = False
-    sphere_alpha: float = 0.8
-    sphere_res: int = 50
     # axis configuration:
     max_axis_extent3d: float = 1
     z_axis_limits: Optional[Tuple[float, float]] = None
     z_axis_max_ticks: int = 3
     draw_dashes3d: bool = True
+    # display options:
+    display_time: bool = True
+    time_text_pos: Tuple[float, float] = (0.1, 0.88)
+    display_legend: bool = False
+    display_baryc: bool = True
+    baryc_markersize: int = 10
+    # if markers are to scale:
+    markers_to_relative_scale: bool = False
+    sphere_alpha: float = 0.8
+    sphere_res: int = 50
     # animation parameters:
     elev_start: int = 30
     azim_start: int = -60
