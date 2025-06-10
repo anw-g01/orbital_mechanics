@@ -16,7 +16,7 @@ class tqdmFA(tqdm):
 
     def __init__(self, *args, fps: int = 60, **kwargs):
         bar_format_str = (
-            "|{bar:25}| {percentage:.1f}%"
+            "|{bar:30}| {percentage:.1f}%"
             " | frame: {n_fmt}/{total_fmt}"
             " | video duration: {vid_dur}"
             " | {sec/frame} "
@@ -33,7 +33,8 @@ class tqdmFA(tqdm):
         super().__init__(*args, **kwargs)       # pass to constructor of parent class
 
     @property
-    def format_dict(self):
+    def format_dict(self) -> dict:
+        """Override the format_dict property to include custom formatting for video writing progress."""
         d = super().format_dict
         d["n_fmt"] = f"{d['n']:,}" if d["n"] else "?"                   # current frame number
         d["total_fmt"] = f"{d['total']:,}" if d["total"] else "?"       # total frames to write (process)
@@ -51,7 +52,7 @@ class tqdmFA(tqdm):
             d["sec/frame"] = "? sec/frame"
             d["frames/sec"] = "? frames/sec"
         # written video duration in seconds:
-        def fmt(t):
+        def fmt(t) -> None:
             """Format timedelta as M:SS (not H:MM:SS)"""
             minutes, seconds = divmod(t.seconds, 60)
             return f"{minutes}:{seconds:02}"
