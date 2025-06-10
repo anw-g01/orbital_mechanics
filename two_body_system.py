@@ -105,7 +105,7 @@ class TwoBodySystem:
         self, 
         r1: np.ndarray, 
         r2: np.ndarray,
-        verbose: bool = False
+        verbose: bool = False,
     ) -> Tuple[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]:
         """
         Project 3D coordinates onto the orbital plane for head-on 2D viewing.
@@ -133,6 +133,10 @@ class TwoBodySystem:
         # (with each time step) to project onto the plane, defined by u1 and u2:
         x1, y1 = np.dot(u1, r1), np.dot(u2, r1)     # project body 1 coordinates
         x2, y2 = np.dot(u1, r2), np.dot(u2, r2)     # project body 2 coordinates
+
+        if self.params.rotate_proj_90cw:
+            # rotate the coordinates 90 degrees counter-clockwise around the z-axis
+            return (y1, -x1), (y2, -x2)    # swap x and y coordinates with a sign change
 
         return (x1, y1), (x2, y2)
 
@@ -222,11 +226,11 @@ class TwoBodySystem:
 
         # --- TEXT: CURRENT TIME STEP (DAYS) --- #
         if cf.display_time:
-            self.t_days = t / (24 * 60 * 60)
+            t_days = t / (24 * 60 * 60)
             xpos, ypos = cf.time_text_pos
             ax.text(
                 xpos, ypos,   # position in axes coordinates (0, 0) bottom left, (1, 1) top right
-                f"T = {self.t_days[-1]:.{cf.time_dp}f} days", 
+                f"T = {t_days[-1]:.{cf.time_dp}f} days", 
                 transform=ax.transAxes,    # map coordinates from axes to figure coordinates
                 fontsize=cf.title_fontsize - 1,
             )     
@@ -287,6 +291,7 @@ class TwoBodySystem:
         body1_orbit, = ax.plot([], [], color=cf.body1_trail_colour, linewidth=cf.line_width)
         body2_orbit, = ax.plot([], [], color=cf.body2_trail_colour, linewidth=cf.line_width)
         if cf.display_time:
+            t_days = t / (24 * 60 * 60)    # convert time to days
             xpos, ypos = cf.time_text_pos
             time_text = ax.text(xpos, ypos, "", transform=ax.transAxes, fontsize=cf.title_fontsize-1)
 
@@ -303,7 +308,8 @@ class TwoBodySystem:
             else:
                 body1_marker.set_offsets([[x1[0], y1[0]]])
                 body2_marker.set_offsets([[x2[0], y2[0]]])
-            time_text.set_text(f"T = {self.t_days[0]:.1f} days")    # set initial time text
+            if cf.display_time:
+                time_text.set_text(f"T = {t_days[0]:.1f} days")    # set initial time text
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
         def _update(frame) -> tuple:
@@ -321,7 +327,7 @@ class TwoBodySystem:
                 body2_marker.set_offsets([[x2[frame], y2[frame]]])
             # update current time step text display if toggled:
             if cf.display_time:
-                time_text.set_text(f"T = {self.t_days[frame]:.{cf.time_dp}f} days")
+                time_text.set_text(f"T = {t_days[frame]:.{cf.time_dp}f} days")
             pbar.update(1)    # update tqdm progress bar
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
@@ -436,11 +442,11 @@ class TwoBodySystem:
 
         # --- TEXT: CURRENT TIME STEP (DAYS) --- #
         if cf_3d.display_time:
-            self.t_days = t / (24 * 60 * 60)
+            t_days = t / (24 * 60 * 60)
             xpos, ypos = cf_3d.time_text_pos
             ax.text2D(
                 xpos, ypos,   # position in axes coordinates (0, 0) bottom left, (1, 1) top right
-                f"T = {self.t_days[-1]:.{cf.time_dp}f} days", 
+                f"T = {t_days[-1]:.{cf.time_dp}f} days", 
                 transform=ax.transAxes,    # map coordinates from axes to figure coordinates
                 fontsize=cf.title_fontsize - 1,
             )
@@ -496,6 +502,7 @@ class TwoBodySystem:
         body1_orbit, = ax.plot([], [], [], color=cf.body1_trail_colour, linewidth=cf.line_width)
         body2_orbit, = ax.plot([], [], [], color=cf.body2_trail_colour, linewidth=cf.line_width)
         if cf_3d.display_time:
+            t_days = t / (24 * 60 * 60)    # convert time to days
             xpos, ypos = cf_3d.time_text_pos
             time_text = ax.text2D(xpos, ypos, "", transform=ax.transAxes, fontsize=cf.title_fontsize-1)
 
@@ -505,14 +512,10 @@ class TwoBodySystem:
         # ----- ANIMATION FUNCTION SETUP ----- #
         def _init() -> tuple:
             body1_orbit.set_data([], []), body2_orbit.set_data([], [])
-            if cf_3d.markers_to_relative_scale:    
-                body1_marker.center = (x1[0], y1[0], z1[0])
-                body2_marker.center = (x2[0], y2[0], z2[0])
-            else:
-                body1_marker._offsets3d = ([x1[0]], [y1[0]], [z1[0]])
-                body2_marker._offsets3d = ([x2[0]], [y2[0]], [z2[0]])
+            body1_marker._offsets3d = ([x1[0]], [y1[0]], [z1[0]])
+            body2_marker._offsets3d = ([x2[0]], [y2[0]], [z2[0]])
             if cf_3d.display_time:
-                time_text.set_text(f"T = {self.t_days[0]:.{cf.time_dp}f} days")            # set initial time text
+                time_text.set_text(f"T = {t_days[0]:.{cf.time_dp}f} days")            # set initial time text
             ax.view_init(elev=cf_3d.elev_start, azim=cf_3d.azim_start)      # set initial camera angles
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
@@ -520,8 +523,8 @@ class TwoBodySystem:
             # update orbit trails:
             i0 = max(0, frame - trail_length)                                       # start index for the trail
             i0_1 = max(0, frame - int(trail_length * cf.trail_length_factor))       # longer trail for body 1
-            body1_orbit.set_data_3d(x1[i0_1:frame], y1[i0_1:frame], z1[i0_1:frame])    # update orbit trail
-            body2_orbit.set_data_3d(x2[i0:frame], y2[i0:frame], z2[i0:frame])
+            body1_orbit.set_data_3d(x1[i0_1:frame + 1], y1[i0_1:frame + 1], z1[i0_1:frame + 1])    # update orbit trail
+            body2_orbit.set_data_3d(x2[i0:frame + 1], y2[i0:frame + 1], z2[i0:frame + 1])
             # update markers:
             body1_marker._offsets3d = ([x1[frame]], [y1[frame]], [z1[frame]])
             body2_marker._offsets3d = ([x2[frame]], [y2[frame]], [z2[frame]])
@@ -535,7 +538,7 @@ class TwoBodySystem:
                 ax.view_init(elev=e_next, azim=a_next)
             # update current time step text display if toggled:
             if cf_3d.display_time:
-                time_text.set_text(f"T = {self.t_days[frame]:.{cf.time_dp}f} days")
+                time_text.set_text(f"T = {t_days[frame]:.{cf.time_dp}f} days")
             pbar.update(1)
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
@@ -584,6 +587,7 @@ def pluto_charon_system() -> None:
             v0=V_CHARON, 
             i_deg=360 - i_CHARON,
             head_on_view=True,      # head-on view for 2D plot (project to orbital plane)
+            rotate_proj_90cw=True,  # rotate 2D projection 90 degrees (matches 3D  alignment)
             T_days=T_PLUTO_CHARON * 1.166 * 4,
             rtol=1e-12, atol=1e-9, steps=600,
             ode_method="RK45",    # use a high-order ODE solver for better accuracy
@@ -592,7 +596,7 @@ def pluto_charon_system() -> None:
             body1_radius=R_PLUTO, 
             body2_radius=R_CHARON,
             figure_size=(8, 8),
-            figure_title="2D Pluto-Charon System - Flat Orbit (TO SCALE)",
+            figure_title="2D Pluto-Charon System - Orbital Plane (TO SCALE)",
             title_fontsize=11,
             body1_legend_label="Pluto", 
             body2_legend_label="Charon",
@@ -617,7 +621,7 @@ def pluto_charon_system() -> None:
         # -- camera panning during animation -- #
         elev_start=20, azim_start=-75,
         camera_pan=True,
-        elev_end=10, azim_end=-30,
+        elev_end=10, azim_end=-20,
         # -- title and legend -- #
         # figure_title="3D Pluto-Charon System",
         figure_size=(10, 10),
@@ -625,12 +629,86 @@ def pluto_charon_system() -> None:
     )
 
     # plot only the complete orbits in 2D and 3D:
-    pluto_charon.plot_orbits2d()        # 2D
-    pluto_charon.plot_orbits3d()        # 3D
+    # pluto_charon.plot_orbits2d()        # 2D
+    # pluto_charon.plot_orbits3d()        # 3D
 
     # create 2D and 3D animations:
-    pluto_charon.animate2d(dpi=100, show_plot_first=False)     # 2D
-    pluto_charon.animate3d(dpi=100, show_plot_first=False)     # 3D
+    pluto_charon.animate2d(dpi=250, show_plot_first=False)     # 2D
+    pluto_charon.animate3d(dpi=250, show_plot_first=False)     # 3D
+
+
+def earth_moon_system(exaggerated: bool = False) -> None:
+    """Simulate and animate the Earth-Moon two-body system with realistic (optional exaggeration toggle) parameters."""
+    if not exaggerated:
+        earth_moon = TwoBodySystem(
+            params=SystemParams(
+                T_days=27.321 * 1.0283 * 4,  
+                rtol=1e-12, 
+                steps=600,
+            ),
+            config=PlotConfig(
+                figure_size=(10, 10),
+                # figure_title="Earth-Moon System - Orbital Plane (TO SCALE)",
+                title_fontsize=11,
+                time_dp=0,
+                body1_legend_label="Earth", 
+                body2_legend_label="Moon",
+                max_axis_extent2d=1.05,
+                line_width=0.4,
+                to_scale=True, 
+                display_baryc=False,    # no barycentre marker in 2D
+                trail_length_pct=5,
+                trail_length_factor=3,
+            )
+        )
+        # setup 3D plot configuration dataclass:
+        earth_moon.config_3d = PlotConfig3D(
+            markers_to_relative_scale=True,         
+            body1_markersize=50,    # size of body2 is scaled if markers_to_relative_scale=True
+            max_axis_extent3d=1,
+            # -- camera panning during animation -- #
+            elev_start=0, azim_start=-60,
+            camera_pan=True,
+            elev_end=40, azim_end=-40,
+            # -- title and legend -- #
+            figure_size=(10, 10),
+            display_legend=False,
+            display_baryc=False,    # no barycentre marker in 3D
+        )
+
+        earth_moon.plot_orbits2d()        # plot only the complete orbits in 2D
+        earth_moon.plot_orbits3d()        # plot only the complete orbits in 3D
+
+        earth_moon.animate2d(dpi=250, show_plot_first=False)    # create animation with 2D figure
+        earth_moon.animate3d(dpi=250, show_plot_first=False)    # create animation with 3D figure
+
+    else:
+        earth_moon = TwoBodySystem(
+            params=SystemParams(
+                m1=M_EARTH * 0.4, m2=M_MOON * 1, 
+                d=D_EARTH_MOON * 0.1, v0=V_MOON * 1, 
+                i_deg=i_MOON, 
+                T_days=0.62 * 3,
+                rtol=1e-6, 
+                steps=600
+            ),
+            config=PlotConfig(
+                figure_size=(10, 10),
+                figure_title="EXAGGERATED Earth-Moon System (NOT TO SCALE)",
+                body1_legend_label="Earth'", body2_legend_label="Moon'",
+                body1_colour="tab:blue", body1_trail_colour="tab:blue",
+                body2_colour="tab:red", body2_trail_colour="tab:red",
+                max_axis_extent2d=1.4, 
+                x_axis_limits=(-1e7, 4.5e7),
+                display_legend=True, 
+                to_scale=False, 
+                display_baryc=True, baryc_alpha=0.8,
+                trail_length_pct=2,
+                trail_length_factor=5
+
+            )
+        )
+        earth_moon.animate2d(dpi=200)    # create animation with 2D figure
 
 
 def equal_mass_system() -> None:
@@ -642,12 +720,14 @@ def equal_mass_system() -> None:
         params=SystemParams(
             m1=mass, m2=mass, d=distance, 
             v0=600, 
-            i_deg=10, 
-            T_days=26 * 3,
-            rtol=1e-9, 
+            i_deg=20, 
+            T_days=25.85 * 3,
+            rtol=1e-12,
             steps=600
         ),
         config=PlotConfig(
+            title_fontsize=11,
+            time_text_pos=(0.05, 0.93),    # position in axes coordinates (0, 0) bottom left, (1, 1) top right
             body1_radius=radius * 1.5, body2_radius=radius * 1.5,
             body1_colour="tab:red", body1_trail_colour="tab:red",
             body2_colour="tab:green", body2_trail_colour="tab:green",
@@ -674,61 +754,9 @@ def equal_mass_system() -> None:
     )
 
     # plot only the complete orbits in 2D and 3D:
-    # equal_mass.plot_orbits2d()        # 2D
-    # equal_mass.plot_orbits3d()        # 3D
+    equal_mass.plot_orbits2d()        # 2D
+    equal_mass.plot_orbits3d()        # 3D
 
     # create 2D and 3D animations:
-    equal_mass.animate2d(dpi=300)    # create animation with 2D figure
-    equal_mass.animate3d(dpi=300)    # create animation with 3D figure
-
-
-def earth_moon_system(exaggerated: bool = False) -> None:
-    """Simulate and animate the Earth-Moon two-body system with realistic (optional exaggeration toggle) parameters."""
-    if not exaggerated:
-        earth_moon = TwoBodySystem(
-            params=SystemParams(
-                rtol=1e-9, 
-                steps=1000,
-                T_days=27.321 * 1.03 * 3,  
-            ),
-            config=PlotConfig(
-                figure_size=(10, 10),
-                figure_title="Earth-Moon System (TO SCALE)",
-                body1_legend_label="Earth", 
-                body2_legend_label="Moon",
-                max_axis_extent2d=1.05,
-                line_width=0.5,
-                to_scale=True, 
-                display_baryc=False,
-                trail_length_pct=2,
-                trail_length_factor=4,
-            )
-        )
-        earth_moon.animate2d(dpi=200)
-    else:
-        earth_moon = TwoBodySystem(
-            params=SystemParams(
-                m1=M_EARTH * 0.4, m2=M_MOON * 1, 
-                d=D_EARTH_MOON * 0.1, v0=V_MOON * 1, 
-                i_deg=i_MOON, 
-                T_days=0.62 * 3,
-                rtol=1e-6, 
-                steps=750
-            ),
-            config=PlotConfig(
-                figure_size=(10, 10),
-                figure_title="EXAGGERATED Earth-Moon System (NOT TO SCALE)",
-                body1_legend_label="Earth'", body2_legend_label="Moon'",
-                body1_colour="tab:blue", body1_trail_colour="tab:blue",
-                body2_colour="tab:red", body2_trail_colour="tab:red",
-                max_axis_extent2d=1.4, 
-                x_axis_limits=(-1e7, 4.5e7),
-                display_legend=True, 
-                to_scale=False, 
-                display_baryc=True, baryc_alpha=0.8,
-                trail_length_pct=2,
-                trail_length_factor=5
-
-            )
-        )
-        earth_moon.animate2d(dpi=200)    # create animation with 2D figure
+    equal_mass.animate2d(dpi=250, show_plot_first=False)    # create animation with 2D figure
+    equal_mass.animate3d(dpi=250, show_plot_first=False)    # create animation with 3D figure
