@@ -86,7 +86,7 @@ class TwoBodySystem:
         t, Z = sol.t, sol.y
         success = sol.success
         print(f"\nsolver success: {success} ({sol.nfev:,} nfev)")
-        print(f"t.shape: {t.shape}, Z.shape: {Z.shape}\n")
+        print(f"t.shape: {t.shape}, Z.shape: {Z.shape}")
         self.t, self.Z = t, Z
 
     def solve(self) -> Tuple[np.ndarray, np.ndarray]:
@@ -94,6 +94,47 @@ class TwoBodySystem:
         if self.t is None or self.Z is None:
             self._solve()
         return self.t, self.Z   # return existing cached solution if available
+
+    def _check_solve(self) -> None:
+        """Check if the ODE solver has been run, and if not, run it."""
+        if self.t is None or self.Z is None:
+            print("Empty solutions, re-running ODE solver...")
+            self.t, self.Z = self.solve()    # call the solve method to ensure t and Z are populated
+
+    def _project_to_orbital_plane(
+        self, 
+        r1: np.ndarray, 
+        r2: np.ndarray,
+        verbose: bool = False
+    ) -> Tuple[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray]]:
+        """
+        Project 3D coordinates onto the orbital plane for head-on 2D viewing.
+        Assuming the orbital plane is NOT the xy-plane (for highly inclined orbits).
+        """
+        if verbose:
+            i = self.params.i_deg    # orbital inclination in degrees
+            print(f"\norbital inclination: {i:.1f}° ({np.radians(i):.2f} rad)")
+            print(f"projecting 3D coordinates to orbital plane for head-on 2D viewing...")
+
+        # use initial positions to define the plane
+        r_rel0 = r2[:, 0] - r1[:, 0]    # initial relative position vector
+        r_rel1 = r2[:, 1] - r1[:, 1]    # second time step relative position vector
+
+        # calculate normal vector to the orbital plane:
+        norm = np.cross(r_rel0, r_rel1)     # cross product
+        norm /= np.linalg.norm(norm)        # normalise the normal vector
+
+        # create two orthogonal vectors in the orbital plane:
+        u1 = r_rel0 / np.linalg.norm(r_rel0)    # 1. initial relative position (normalised) in the plane
+        u2 = np.cross(norm, u1)                 # 2. orthogonal to u1 and norm vector
+        u2 /= np.linalg.norm(u2)                # normalise u2
+
+        # project the 3D coordinates onto the orbital plane, using dot product 
+        # (with each time step) to project onto the plane, defined by u1 and u2:
+        x1, y1 = np.dot(u1, r1), np.dot(u2, r1)     # project body 1 coordinates
+        x2, y2 = np.dot(u1, r2), np.dot(u2, r2)     # project body 2 coordinates
+
+        return (x1, y1), (x2, y2)
 
     def _create_figure2d(
         self, 
@@ -150,18 +191,19 @@ class TwoBodySystem:
 
     def plot_orbits2d(self) -> None:
         """Plot the complete orbits of the two bodies in 2D, using parameters defined in `self.config`."""
+        
         cf = self.config    # shorthand alias for the PlotConfig instance
-        
-        if self.t is None or self.Z is None:
-            print("Empty solutions, re-running ODE solver...")
-            t, Z = self.solve()
-        else:
-            t, Z = self.t, self.Z
+        t, Z = self.t, self.Z
+        r1, _, r2, _ = np.vsplit(Z, 4)    # unpack state vector (split along rows)
 
-        r1, v1, r2, v2 = np.vsplit(Z, 4)    # unpack state vector (split along rows)
-        x1, y1 = r1[0, :], r1[1, :]         # unpack body 1 2D coordinates
-        x2, y2 = r2[0, :], r2[1, :]         # unpack body 2 2D coordinates  
-        
+        if self.params.head_on_view:    
+            # project to orbital plane for head-on 2D viewing:
+            (x1, y1), (x2, y2) = self._project_to_orbital_plane(r1, r2, verbose=True)
+        else:
+            # unpack 2D coordinates directly (assumes r1 and r2 are already in 2D):
+            x1, y1 = r1[0, :], r1[1, :]         # unpack body 1 2D coordinates
+            x2, y2 = r2[0, :], r2[1, :]         # unpack body 2 2D coordinates
+
         # ----- MAIN FIGURE ----- #
         fig, ax = self._create_figure2d((x1, x2), (y1, y2))   # create a 2D base figure with axes
 
@@ -180,7 +222,7 @@ class TwoBodySystem:
 
         # --- TEXT: CURRENT TIME STEP (DAYS) --- #
         if cf.display_time:
-            self.t_days = self.t / (24 * 60 * 60)
+            self.t_days = t / (24 * 60 * 60)
             xpos, ypos = cf.time_text_pos
             ax.text(
                 xpos, ypos,   # position in axes coordinates (0, 0) bottom left, (1, 1) top right
@@ -194,6 +236,7 @@ class TwoBodySystem:
 
     def animate2d(
         self, 
+        show_plot_first: bool = True,
         fps: int = 60, 
         bitrate: int = 50_000,
         dpi: int = 200,
@@ -201,31 +244,34 @@ class TwoBodySystem:
         """Animate the 2D orbits of the two-body system. Writes to an MP4 file."""
 
         cf = self.config    # shorthand alias for the PlotConfig instance
-    
-        if self.t is None or self.Z is None:
-            print("Empty solutions, re-running ODE solver...")
-            t, Z = self.solve()
-        else:
-            t, Z = self.t, self.Z
+        self._check_solve()    
+        t, Z = self.t, self.Z
 
-        # show the static complete orbit trails (final positions) first:
-        print(f"plotting final positions with complete orbit trails...")
-        print("<CLOSE FIGURE WINDOW TO START ANIMATION WRITING>")
-        self.plot_orbits2d()    # figure window must be closed before continuing 
+        # show the static complete orbit trails (final positions):
+        if show_plot_first:
+            print(f"\nplotting final positions with complete orbit trails...")
+            print("<CLOSE FIGURE WINDOW TO START ANIMATION WRITING>")
+            self.plot_orbits2d()    # figure window must be closed before continuing 
 
         # key animation statistics
         interval = int(1000 / fps)     # convert FPS to milliseconds
         steps = len(t)                                      # total number of time steps from the ODE solver
         trail_length = int((cf.trail_length_pct / 100) * steps) 
-        print(f"\n{steps:,} steps @ {fps} fps (~{interval * 1e-3:.3f} sec/frame) and {dpi} DPI")
+        print(f"\n# ---------- 2D ANIMATION ---------- #")
+        print(f"{steps:,} steps @ {fps} fps (~{interval * 1e-3:.3f} sec/frame) and {dpi} DPI")
         duration = steps / fps
         print(f"total video duration: {duration:.2f} sec ({duration / 60:.1f} min)")
         print(f"writing {steps} frames to MP4...\n")
 
         # ----- EXTRACT COORDINATES ----- #
-        r1, v1, r2, v2 = np.vsplit(Z, 4)    # unpack state vector (split along rows)
-        x1, y1 = r1[0, :], r1[1, :]         # unpack body 1 2D coordinates
-        x2, y2 = r2[0, :], r2[1, :]         # unpack body 2 2D coordinates  
+        r1, _, r2, _ = np.vsplit(Z, 4)    # unpack state vector (split along rows)
+        # project to orbital plane if head-on view is enabled:
+        if self.params.head_on_view:    
+            (x1, y1), (x2, y2) = self._project_to_orbital_plane(r1, r2)
+        else:
+            # unpack 2D coordinates directly (assumes r1 and r2 are already in 2D):
+            x1, y1 = r1[0, :], r1[1, :]         # unpack body 1 2D coordinates
+            x2, y2 = r2[0, :], r2[1, :]         # unpack body 2 2D coordinates
 
         # ----- FIGURE SETUP ----- #
         fig, ax = self._create_figure2d((x1, x2), (y1, y2))   # create a 2D base figure with axes
@@ -365,16 +411,10 @@ class TwoBodySystem:
 
     def plot_orbits3d(self) -> None:
         """Plot the complete orbits of the two bodies in 3D."""
-        cf = self.config            # shorthand alias for the PlotConfig instance (2D)
-        cf_3d = self.config_3d      # shorthand alias for the PlotConfig3D instance (3D)
-        
-        if self.t is None or self.Z is None:
-            print("Empty solutions, re-running ODE solver...")
-            t, Z = self.solve()
-        else:
-            t, Z = self.t, self.Z
+        cf, cf_3d = self.config, self.config_3d    
+        t, Z = self.t, self.Z
 
-        r1, v1, r2, v2 = np.vsplit(Z, 4)            # unpack state vector (split along rows)
+        r1, _, r2, _ = np.vsplit(Z, 4)            # unpack state vector (split along rows)
         x1, y1, z1 = r1[0, :], r1[1, :], r1[2, :]   # unpack body 1 3D coordinates
         x2, y2, z2 = r2[0, :], r2[1, :], r2[2, :]   # unpack body 2 3D coordinates
 
@@ -396,7 +436,7 @@ class TwoBodySystem:
 
         # --- TEXT: CURRENT TIME STEP (DAYS) --- #
         if cf_3d.display_time:
-            self.t_days = self.t / (24 * 60 * 60)
+            self.t_days = t / (24 * 60 * 60)
             xpos, ypos = cf_3d.time_text_pos
             ax.text2D(
                 xpos, ypos,   # position in axes coordinates (0, 0) bottom left, (1, 1) top right
@@ -410,29 +450,29 @@ class TwoBodySystem:
 
     def animate3d(
         self, 
+        show_plot_first: bool = True,
         fps: int = 60, 
         dpi: int = 200, 
         bitrate: int = 50_000,
     ) -> None:
         """Animate the 3D orbits of the two-body system. Writes to an MP4 file."""
-        cf, cf_3d = self.config, self.config_3d    # shorthand alias for the PlotConfig instance
         
-        if self.t is None or self.Z is None:
-            print("Empty solutions, re-running ODE solver...")
-            t, Z = self.solve()
-        else:
-            t, Z = self.t, self.Z
+        cf, cf_3d = self.config, self.config_3d    # shorthand alias for the PlotConfig instance
+        self._check_solve()    
+        t, Z = self.t, self.Z
 
         # show the static complete orbit trails (final positions) first:
-        print(f"plotting final positions with complete orbit trails...")
-        print("<CLOSE FIGURE WINDOW TO START ANIMATION WRITING>")
-        self.plot_orbits3d()    # figure window must be closed before continuing 
+        if show_plot_first:
+            print(f"\nplotting final positions with complete orbit trails...")
+            print("<CLOSE FIGURE WINDOW TO START ANIMATION WRITING>")
+            self.plot_orbits3d()    # figure window must be closed before continuing 
 
         # key animation statistics
         interval = int(1000 / fps)      # convert FPS to milliseconds
         steps = len(t)                  # total number of time steps from the ODE solver
         trail_length = int((cf.trail_length_pct / 100) * steps) 
-        print(f"\n{steps:,} steps @ {fps} fps (~{interval * 1e-3:.3f} sec/frame), {dpi=}")
+        print(f"\n# ---------- 3D ANIMATION ---------- #")
+        print(f"{steps:,} steps @ {fps} fps (~{interval * 1e-3:.3f} sec/frame), {dpi=}")
         duration = steps / fps
         print(f"total video duration: {duration:.2f} sec ({duration / 60:.1f} min)")
         print(f"writing {steps} frames to MP4...\n")
@@ -542,16 +582,18 @@ def pluto_charon_system() -> None:
             m2=M_CHARON, 
             d=D_PLUTO_CHARON, 
             v0=V_CHARON, 
-            i_deg=360 - i_CHARON,     # high inclination angle will obscure the 2D view orbit (set to 0 to see flat)
-            # i_deg=0,    # inclination angle (0 for a flat head-on view orbit)
-            T_days=T_PLUTO_CHARON * 1.175 * 4,
-            rtol=1e-9, steps=750
+            i_deg=360 - i_CHARON,
+            head_on_view=True,      # head-on view for 2D plot (project to orbital plane)
+            T_days=T_PLUTO_CHARON * 1.166 * 4,
+            rtol=1e-12, atol=1e-9, steps=600,
+            ode_method="RK45",    # use a high-order ODE solver for better accuracy
         ),
         config=PlotConfig(
             body1_radius=R_PLUTO, 
             body2_radius=R_CHARON,
             figure_size=(8, 8),
             figure_title="2D Pluto-Charon System - Flat Orbit (TO SCALE)",
+            title_fontsize=11,
             body1_legend_label="Pluto", 
             body2_legend_label="Charon",
             body1_colour="tab:brown", 
@@ -562,7 +604,7 @@ def pluto_charon_system() -> None:
             display_baryc=True,
             max_axis_extent2d=1.1,
             trail_length_pct=6,
-            trail_length_factor=3,
+            trail_length_factor=2.5,
             display_legend=True, 
             to_scale=True, 
         )
@@ -570,25 +612,25 @@ def pluto_charon_system() -> None:
     # setup 3D plot configuration dataclass:
     pluto_charon.config_3d = PlotConfig3D(
         markers_to_relative_scale=True,         
-        body1_markersize=500,                   # size of body2 is scaled if markers_to_relative_scale=True
+        body1_markersize=500,    # size of body2 is scaled if markers_to_relative_scale=True
         max_axis_extent3d=1,
-        # camera panning during animation:
+        # -- camera panning during animation -- #
         elev_start=20, azim_start=-75,
         camera_pan=True,
         elev_end=10, azim_end=-30,
-        # title and legend:
+        # -- title and legend -- #
         # figure_title="3D Pluto-Charon System",
         figure_size=(10, 10),
         display_legend=False
     )
 
     # plot only the complete orbits in 2D and 3D:
-    # pluto_charon.plot_orbits2d()        # 2D
-    # pluto_charon.plot_orbits3d()        # 3D
+    pluto_charon.plot_orbits2d()        # 2D
+    pluto_charon.plot_orbits3d()        # 3D
 
     # create 2D and 3D animations:
-    pluto_charon.animate2d(dpi=200)     # 2D
-    pluto_charon.animate3d(dpi=200)     # 3D
+    pluto_charon.animate2d(dpi=100, show_plot_first=False)     # 2D
+    pluto_charon.animate3d(dpi=100, show_plot_first=False)     # 3D
 
 
 def equal_mass_system() -> None:

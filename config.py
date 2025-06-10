@@ -11,6 +11,7 @@ class SystemParams:
     d: float = D_EARTH_MOON
     v0: float = V_MOON
     i_deg: float = i_MOON
+    head_on_view: bool = True
     # ODE solver parameters
     T_days: float = 27.321
     steps: int = 1000
