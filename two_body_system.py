@@ -284,7 +284,15 @@ class TwoBodySystem:
         """Animate the 2D orbits of the two-body system. Writes to an MP4 file."""
 
         cf = self.config    # shorthand alias for the PlotConfig instance
-
+        
+        # set axis limits based on projected coordinates or original 2D coordinates:
+        if self.params.head_on_view:
+            # use projected coordinates to calculate axis limits:
+            x1, y1, x2, y2 = self.x1_proj, self.y1_proj, self.x2_proj, self.y2_proj
+        else:
+            # unpack 2D coordinates normally:
+            x1, y1, x2, y2 = self.x1, self.y1, self.x2, self.y2  
+        
         # show the static complete orbit trails (final positions):
         if show_plot_first:
             print(f"\nplotting final positions with complete orbit trails...")
@@ -470,17 +478,33 @@ class TwoBodySystem:
         plt.tight_layout(), plt.show()
         return fig, gs, ax
 
-    def plot_orbits(self) -> plt.Figure:
-        "Plot complete two-body system orbits as side-by-side 2D and 3D figures."
+    def plot_orbits(self, left_2d: bool = True, ratio: float = 1.3) -> plt.Figure:
+        """
+        Plot side-by-side 2D and 3D figures of the complete two-body system orbits.
+
+        Params:
+            - `left_2d`: bool, whether to place the 2D plot on the left side.
+            - `ratio`: float, width ratio of the 3D plot relative to the 2D plot.
+        """
         fig = plt.figure(figsize=self.config.dashboard_figure_size, constrained_layout=True)
-        outer = GridSpec(nrows=1, ncols=2, wspace=0.08, figure=fig)
-        gs1 = outer[0].subgridspec(nrows=1, ncols=1)
-        gs2 = outer[1].subgridspec(nrows=1, ncols=1)
-        # build each subplot from existing methods:
-        ax1 = self._plot_orbits3d(fig, gs1)
-        ax2 = self._plot_orbits2d(fig, gs2)
+
+        # create a grid layout for the figure:
+        if left_2d:
+            outer = GridSpec(1, 2, width_ratios=[1, ratio], wspace=0.1, figure=fig)
+            gs_2d = outer[0].subgridspec(nrows=1, ncols=1)
+            gs_3d = outer[1].subgridspec(nrows=1, ncols=1)
+        else:
+            outer = GridSpec(1, 2, width_ratios=[ratio, 1], wspace=0.1, figure=fig)
+            gs_3d = outer[0].subgridspec(nrows=1, ncols=1)
+            gs_2d = outer[1].subgridspec(nrows=1, ncols=1)
+        
+        # generate subplots with existing methods:
+        ax_3d = self._plot_orbits3d(fig, gs_3d)
+        ax_2d = self._plot_orbits2d(fig, gs_2d)
+
         plt.show()
-        return fig, (ax1, ax2)
+
+        return fig, (ax_3d, ax_2d)
 
     def animate3d(
         self, 

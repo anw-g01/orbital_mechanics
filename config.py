@@ -49,7 +49,7 @@ class PlotConfig:
     trail_length_pct: int = 10  
     trail_length_factor: float = 3.0
     # display options:
-    display_time: bool = True
+    display_time: bool = False
     time_text_pos: Tuple[float, float] = (0.05, 0.93)
     time_dp: int = 1
     display_legend: bool = False
@@ -80,7 +80,7 @@ class PlotConfig3D():
     num_axis_max_ticks: int = 3
     draw_dashes3d: bool = True
     # display options:
-    display_time: bool = False
+    display_time: bool = True
     time_text_pos: Tuple[float, float] = (0.12, 0.85)
     display_legend: bool = False
     display_baryc: bool = True
