@@ -5,6 +5,7 @@ import matplotlib.lines as mlines
 import matplotlib.patches as mpatches
 from matplotlib.ticker import MaxNLocator
 from matplotlib.animation import FuncAnimation, FFMpegWriter
+from matplotlib.gridspec import GridSpec
 import datetime
 from constants import *
 from tqdm_pbar import tqdmFA
@@ -172,13 +173,10 @@ class TwoBodySystem:
 
         return (x1, y1), (x2, y2)
 
-    def _create_figure2d(self) -> Tuple[plt.Figure, plt.Axes]:
-        """Setup a 2D base figure with axes for plotting the two-body system."""
-        cf = self.config    # shorthand alias for the PlotConfig instance
-        
-        # ----- FIGURE SETUP ----- #
-        fig, ax = plt.subplots(figsize=cf.figure_size)    # create a figure with specified size
-        ax.set_aspect("equal")    # ensure equal aspect ratio after setting limits
+    def _create_figure2d(self, fig: plt.Figure, gs: GridSpec) -> plt.Axes:
+        """Helper function to populate the base figure and axes used for plotting orbits in 2D."""
+        cf = self.config    
+        ax = fig.add_subplot(gs[0, 0])    
         if cf.figure_title:
             ax.set_title(cf.figure_title)
         ax.xaxis.set_major_locator(MaxNLocator(cf.x_axis_max_ticks))
@@ -186,26 +184,26 @@ class TwoBodySystem:
         ax.set_xlabel(r"$x$ ($m$)")
         ax.set_ylabel(r"$y$ ($m$)")
 
-        # ----- GRIDS AND DASHED LINES ----- #
+        # dashed cross lines:
         ax.grid(True, alpha=cf.grid_alpha)
         hline = ax.axhline(0, linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
         vline = ax.axvline(0, linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
         hline.set_dashes([10, 10])
         vline.set_dashes([10, 10])
 
-        # show barycentre marker (lies exactly at the origin):
+        # show barycentre marker (origin):
         if cf.display_baryc:     
             ax.scatter(0, 0, marker="x", s=cf.baryc_markersize, color=cf.baryc_colour, label=cf.baryc_legend_label, alpha=cf.baryc_alpha, zorder=10)
         
-        # --- AXIS LIMITS --- #
+        # set axis limits based on projected coordinates or original 2D coordinates:
         if self.params.head_on_view:
             # use projected coordinates to calculate axis limits:
-            x1, y1 = self.x1_proj, self.y1_proj    
-            x2, y2 = self.x2_proj, self.y2_proj
+            x1, y1, x2, y2 = self.x1_proj, self.y1_proj, self.x2_proj, self.y2_proj
         else:
             # unpack 2D coordinates normally:
             x1, y1, x2, y2 = self.x1, self.y1, self.x2, self.y2    
 
+        # set axis limits and aspect ratio:
         if cf.x_axis_limits:
             ax.set_xlim(cf.x_axis_limits)
         else:
@@ -218,22 +216,20 @@ class TwoBodySystem:
             y_all = np.concatenate((y1, y2))
             y_extent = cf.max_axis_extent2d * np.max(np.abs(y_all))
             ax.set_ylim(-y_extent, y_extent)
+        ax.set_aspect("equal")    
 
-        # --- LEGEND --- #
+        # proxy markers for legend:
         if cf.display_legend:
-            # create proxy markers for legend (independent of actual plotted objects)
             body1_legend = mlines.Line2D([], [], color=cf.body1_colour, marker='o', linestyle='None', markersize=6, label=cf.body1_legend_label)
             body2_legend = mlines.Line2D([], [], color=cf.body2_colour, marker='o', linestyle='None', markersize=6, label=cf.body2_legend_label)
             baryc_legend = mlines.Line2D([], [], color=cf.baryc_colour, marker='x', linestyle='None', markersize=6, label=cf.baryc_legend_label)
             ax.legend(handles=[body1_legend, body2_legend, baryc_legend])
         
-        return fig, ax
+        return ax
 
-    def plot_orbits2d(self) -> None:
-        """Plot the complete orbits of the two bodies in 2D, using parameters defined in `self.config`."""
-        
+    def _plot_orbits2d(self, fig: plt.Figure, gs: GridSpec) -> plt.Axes:
+        """Helper method to populate a figure and axes with 2D orbits."""
         cf = self.config    # shorthand alias for the PlotConfig instance
-
         if self.params.head_on_view:
             # use projected coordinates for head-on viewing:
             x1, y1 = self.x1_proj, self.y1_proj    
@@ -242,15 +238,16 @@ class TwoBodySystem:
             # use original 2D coordinates:
             x1, y1, x2, y2 = self.x1, self.y1, self.x2, self.y2   
 
-        # ----- MAIN FIGURE ----- #
-        fig, ax = self._create_figure2d()   # create a 2D base figure with axes
+        # create a 2D base figure with axes:
+        ax = self._create_figure2d(fig, gs)    
 
-        # --- PLOT FULL ORBIT TRAILS --- #
+        # plot 2D orbit trajectories:
         ax.plot(x1, y1, color=cf.body1_trail_colour, linewidth=cf.line_width)
         ax.plot(x2, y2, color=cf.body2_trail_colour, linewidth=cf.line_width)
 
-        # --- ADD MARKERS --- #
-        if cf.to_scale:    # show bodies to scale
+        # display final positions of the bodies:
+        if cf.to_scale:    
+            # draw planetary bodies to scale:
             body1 = mpatches.Circle((x1[-1], y1[-1]), radius=cf.body1_radius, color=cf.body1_colour, label=cf.body1_legend_label, zorder=5)
             body2 = mpatches.Circle((x2[-1], y2[-1]), radius=cf.body2_radius, color=cf.body2_colour, label=cf.body2_legend_label, zorder=5)
             ax.add_patch(body1), ax.add_patch(body2)
@@ -258,7 +255,7 @@ class TwoBodySystem:
             ax.scatter(x1[-1], y1[-1], color=cf.body1_colour, s=cf.body1_markersize, zorder=5)
             ax.scatter(x2[-1], y2[-1], color=cf.body2_colour, s=cf.body2_markersize, zorder=5)
 
-        # --- TEXT: CURRENT TIME STEP (DAYS) --- #
+        # display time step in days if toggled:
         if cf.display_time:
             t_days = self.t / (24 * 60 * 60)
             xpos, ypos = cf.time_text_pos
@@ -267,9 +264,15 @@ class TwoBodySystem:
                 f"T = {t_days[-1]:.{cf.time_dp}f} days", 
                 transform=ax.transAxes,    # map coordinates from axes to figure coordinates
             )     
-
-        fig.set_tight_layout(True)    # adjust layout to fit all elements
-        plt.show()
+        return ax
+    
+    def plot_orbits2d(self) -> Tuple[plt.Figure, GridSpec, plt.Axes]:
+        """Plot the complete orbits of the two bodies in 2D."""
+        fig = plt.figure(figsize=self.config .figure_size)
+        gs = GridSpec(nrows=1, ncols=1, figure=fig)    # create a single subplot grid
+        ax = self._plot_orbits2d(fig, gs)
+        plt.tight_layout(), plt.show()    
+        return fig, gs, ax
 
     def animate2d(
         self, 
@@ -291,13 +294,15 @@ class TwoBodySystem:
         # key animation statistics
         trail_length = int((cf.trail_length_pct / 100) * self.steps) 
         print(f"\n# ---------- 2D ANIMATION ---------- #")
-        print(f"{self.steps:,} steps @ {fps} fps (~{self.interval * 1e-3:.3f} sec/frame) and {dpi} DPI")
+        # print(f"{self.steps:,} steps @ {fps} fps (~{self.interval * 1e-3:.3f} sec/frame) and {dpi} DPI")
         duration = self.steps / fps
         print(f"total video duration: {duration:.2f} sec ({duration / 60:.1f} min)")
         print(f"writing {self.steps} frames to MP4...\n")
 
         # ----- FIGURE SETUP ----- #
-        fig, ax = self._create_figure2d()   # create a 2D base figure with axes
+        fig = plt.figure(figsize=self.config_3d.figure_size)
+        gs = GridSpec(nrows=1, ncols=1, figure=fig)
+        ax = self._create_figure2d(fig, gs)
 
         # --- PLOT ELEMENTS (TO BE UPDATED IN ANIMATION) --- #
         if cf.to_scale:    # show planetary bodies to scale
@@ -382,65 +387,62 @@ class TwoBodySystem:
             avg_rate = f"{1 / avg_iter_per_sec:.2f} sec/frame"
         print(f"{avg_iter_per_sec:.1f} frames/sec processed ({avg_rate})")   
 
-    def create_figure3d(self) -> Tuple[plt.Figure, Axes3D]:
-        """Setup a 3D base figure with axes for plotting the two-body system."""
+    def _create_figure3d(self, fig: plt.Figure, gs: GridSpec) -> plt.Axes:
+        """Helper function to populate the base figure and axes used for plotting orbits in 3D."""
         cf, cf_3d = self.config, self.config_3d    # shorthand alias for the PlotConfig instances
-
-        # ----- 3D FIGURE SETUP ----- #
-        fig = plt.figure(figsize=cf_3d.figure_size)
-        ax = fig.add_subplot(111, projection="3d")
+        ax = fig.add_subplot(gs[0, 0], projection="3d")
         if cf_3d.figure_title:
             ax.set_title(cf_3d.figure_title)
-        ax.set_xlabel(r"$x$ ($m$)")
-        ax.set_ylabel(r"$y$ ($m$)")
-        ax.set_zlabel(r"$z$ ($m$)")
         ax.xaxis.set_major_locator(MaxNLocator(cf_3d.num_axis_max_ticks))
         ax.yaxis.set_major_locator(MaxNLocator(cf_3d.num_axis_max_ticks))
         ax.zaxis.set_major_locator(MaxNLocator(cf_3d.num_axis_max_ticks))
-        ax.set_box_aspect([1, 1, 1])    # set equal aspect ratio for all axes
+        ax.set_xlabel(r"$x$ ($m$)")
+        ax.set_ylabel(r"$y$ ($m$)")
+        ax.set_zlabel(r"$z$ ($m$)")
 
-        # --- AXIS LIMITS --- #
+        # axis limits and equal aspect ratio:
+        ax.set_box_aspect([1, 1, 1])    
         all = np.concatenate((self.x1, self.y1, self.z1, self.x2, self.y2, self.z2))    # combine all coordinates
         max_extent = cf_3d.max_axis_extent3d * np.max(np.abs(all))    # calculate max extent based on coordinates
         ax.set_xlim3d(-max_extent, max_extent)
         ax.set_ylim3d(-max_extent, max_extent)
-        ax.set_zlim3d(-max_extent, max_extent)    # equal limits for equal aspect ratio 
+        ax.set_zlim3d(-max_extent, max_extent)
 
-        # --- DASHED LINES --- #
+        # dashed cross lines:
         if cf_3d.draw_dashes3d:
             x_dash = ax.plot([-max_extent, max_extent], [0, 0], [0, 0], linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
             y_dash = ax.plot([0, 0], [-max_extent, max_extent], [0, 0], linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
             z_dash = ax.plot([0, 0], [0, 0], [-max_extent, max_extent], linestyle="--", color="black", alpha=cf.dashed_line_alpha, linewidth=cf.dashed_line_width, zorder=1)
             x_dash[0].set_dashes([10, 10]), y_dash[0].set_dashes([10, 10]), z_dash[0].set_dashes([10, 10])
 
-        # show barycentre marker (lies exactly at the origin):
+        # show barycentre marker (origin):
         if cf_3d.display_baryc:     
             ax.scatter(0, 0, 0, marker="x", s=cf_3d.baryc_markersize, color=cf.baryc_colour, label=cf.baryc_legend_label, alpha=cf.baryc_alpha)
     
+        # proxy markers for legend:
         if cf_3d.display_legend:
-            # Create proxy markers for legend (independent of actual plotted objects)
             body1_legend = mlines.Line2D([], [], color=cf.body1_colour, marker='o', linestyle='None', markersize=6, label=cf.body1_legend_label)
             body2_legend = mlines.Line2D([], [], color=cf.body2_colour, marker='o', linestyle='None', markersize=6, label=cf.body2_legend_label)
             baryc_legend = mlines.Line2D([], [], color=cf.baryc_colour, marker='x', linestyle='None', markersize=6, label=cf.baryc_legend_label)
             ax.legend(handles=[body1_legend, body2_legend, baryc_legend])
 
-        # --- CAMERA VIEW ANGLE (ELEVATION & AZIMUTH) --- #
+        # set initial camera view angle (elevation & azimuth):
         ax.view_init(elev=cf_3d.elev_start, azim=cf_3d.azim_start)    # set initial starting angles
 
-        return fig, ax
+        return ax
 
-    def plot_orbits3d(self) -> None:
-        """Plot the complete orbits of the two bodies in 3D."""
-        cf, cf_3d = self.config, self.config_3d    
+    def _plot_orbits3d(self, fig: plt.Figure, gs: GridSpec) -> plt.Axes:
+        """Helper method to populate a figure and axes with 3D orbits."""
+        cf, cf_3d = self.config, self.config_3d  
 
-        # ----- MAIN 3D FIGURE ----- #
-        fig, ax = self.create_figure3d()    # create a 3D base figure with axes
+        # create a 3D base figure with axes:
+        ax = self._create_figure3d(fig, gs)    
 
-        # --- PLOT FULL ORBIT TRAILS --- #
+        # plot 3D orbit trajectories:
         ax.plot(self.x1, self.y1, self.z1, color=cf.body1_trail_colour, linewidth=cf.line_width)
         ax.plot(self.x2, self.y2, self.z2, color=cf.body2_trail_colour, linewidth=cf.line_width)
 
-        # --- ADD MARKERS --- #
+        # display final positions of the bodies:
         if cf_3d.markers_to_relative_scale:    # show bodies to scale
             # relative scale of marker2 size based on defined marker1 size
             size2 = cf_3d.body1_markersize * (cf.body2_radius / cf.body1_radius) ** 2    # scale by the square of the radius ratio
@@ -449,7 +451,7 @@ class TwoBodySystem:
         ax.scatter(self.x1[-1], self.y1[-1], self.z1[-1], color=cf.body1_colour, s=cf_3d.body1_markersize, label=cf.body1_legend_label, zorder=5)
         ax.scatter(self.x2[-1], self.y2[-1], self.z2[-1], color=cf.body2_colour, s=size2, label=cf.body2_legend_label, zorder=5)
 
-        # --- TEXT: CURRENT TIME STEP (DAYS) --- #
+        # display time step in days if toggled:
         if cf_3d.display_time:
             t_days = self.t / (24 * 60 * 60)
             xpos, ypos = cf_3d.time_text_pos
@@ -458,9 +460,27 @@ class TwoBodySystem:
                 f"T = {t_days[-1]:.{cf.time_dp}f} days", 
                 transform=ax.transAxes,    # map coordinates from axes to figure coordinates
             )
+        return ax
 
-        fig.set_tight_layout(True)    # adjust layout to fit all elements
+    def plot_orbits3d(self) -> Tuple[plt.Figure, GridSpec, plt.Axes]:
+        """Plot the complete orbits of the two bodies in 3D."""
+        fig = plt.figure(figsize=self.config_3d.figure_size)
+        gs = GridSpec(nrows=1, ncols=1, figure=fig)    # create a single subplot grid
+        ax = self._plot_orbits3d(fig, gs)
+        plt.tight_layout(), plt.show()
+        return fig, gs, ax
+
+    def plot_orbits(self) -> plt.Figure:
+        "Plot complete two-body system orbits as side-by-side 2D and 3D figures."
+        fig = plt.figure(figsize=self.config.dashboard_figure_size, constrained_layout=True)
+        outer = GridSpec(nrows=1, ncols=2, wspace=0.08, figure=fig)
+        gs1 = outer[0].subgridspec(nrows=1, ncols=1)
+        gs2 = outer[1].subgridspec(nrows=1, ncols=1)
+        # build each subplot from existing methods:
+        ax1 = self._plot_orbits3d(fig, gs1)
+        ax2 = self._plot_orbits2d(fig, gs2)
         plt.show()
+        return fig, (ax1, ax2)
 
     def animate3d(
         self, 
@@ -487,7 +507,9 @@ class TwoBodySystem:
         print(f"writing {self.steps} frames to MP4...\n")
 
         # ----- BASE 3D FIGURE SETUP ----- #
-        fig, ax = self.create_figure3d() 
+        fig = plt.figure(figsize=self.config_3d.figure_size)
+        gs = GridSpec(nrows=1, ncols=1, figure=fig)
+        ax = self._create_figure3d(fig, gs)
 
         # --- PLOT ELEMENTS (TO BE UPDATED IN ANIMATION) --- #
         if cf_3d.markers_to_relative_scale:    # show planetary bodies to scale
@@ -628,9 +650,12 @@ def pluto_charon_system() -> None:
     # pluto_charon.plot_orbits2d()        # 2D
     # pluto_charon.plot_orbits3d()        # 3D
 
+    # plot both 2D and 3D orbits side by side:
+    pluto_charon.plot_orbits()    
+
     # create 2D and 3D animations:
-    pluto_charon.animate2d(dpi=250, show_plot_first=False)     # 2D
-    pluto_charon.animate3d(dpi=250, show_plot_first=False)     # 3D
+    # pluto_charon.animate2d(dpi=250, show_plot_first=False)     # 2D
+    # pluto_charon.animate3d(dpi=250, show_plot_first=False)     # 3D
 
 
 def earth_moon_system(exaggerated: bool = False) -> None:

@@ -27,6 +27,8 @@ class PlotConfig:
     # figure properties:
     figure_size: Tuple[int, int] = (10, 10)
     figure_title: Optional[str]  = None
+    dashboard_figure_size: Tuple[int, int] = (16, 9)
+    dashboard_figure_title: Optional[str] = None
     grid_alpha: float = 0.15
     dashed_line_alpha: float = 0.1
     dashed_line_width: float = 0.8
@@ -48,7 +50,7 @@ class PlotConfig:
     trail_length_factor: float = 3.0
     # display options:
     display_time: bool = True
-    time_text_pos: Tuple[float, float] = (0.05, 0.92)
+    time_text_pos: Tuple[float, float] = (0.05, 0.93)
     time_dp: int = 1
     display_legend: bool = False
     display_baryc: bool = False
@@ -78,7 +80,7 @@ class PlotConfig3D():
     num_axis_max_ticks: int = 3
     draw_dashes3d: bool = True
     # display options:
-    display_time: bool = True
+    display_time: bool = False
     time_text_pos: Tuple[float, float] = (0.12, 0.85)
     display_legend: bool = False
     display_baryc: bool = True
