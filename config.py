@@ -27,13 +27,12 @@ class PlotConfig:
     # figure properties:
     figure_size: Tuple[int, int] = (10, 10)
     figure_title: Optional[str]  = None
-    title_fontsize: int = 10
     grid_alpha: float = 0.15
     dashed_line_alpha: float = 0.1
     dashed_line_width: float = 0.8
     # axis configuration:
-    x_axis_max_ticks: int = 3
-    y_axis_max_ticks: int = 3
+    x_axis_max_ticks: int = 5
+    y_axis_max_ticks: int = 5
     x_axis_limits: Optional[Tuple[float, float]] = None
     y_axis_limits: Optional[Tuple[float, float]] = None
     max_axis_extent2d: float = 1.05
@@ -49,7 +48,7 @@ class PlotConfig:
     trail_length_factor: float = 3.0
     # display options:
     display_time: bool = True
-    time_text_pos: Tuple[float, float] = (0.04, 0.95)
+    time_text_pos: Tuple[float, float] = (0.05, 0.92)
     time_dp: int = 1
     display_legend: bool = False
     display_baryc: bool = False
@@ -76,11 +75,11 @@ class PlotConfig3D():
     # axis configuration:
     max_axis_extent3d: float = 1
     z_axis_limits: Optional[Tuple[float, float]] = None
-    z_axis_max_ticks: int = 3
+    num_axis_max_ticks: int = 3
     draw_dashes3d: bool = True
     # display options:
     display_time: bool = True
-    time_text_pos: Tuple[float, float] = (0.1, 0.88)
+    time_text_pos: Tuple[float, float] = (0.12, 0.85)
     display_legend: bool = False
     display_baryc: bool = True
     baryc_markersize: int = 10
