@@ -64,7 +64,11 @@ class PlotConfig:
     body1_legend_label: Optional[str] = None
     body2_radius: float = R_MOON
     body2_legend_label: Optional[str] = None
-
+    # MP4 video parameters:
+    video_duration: int = 10    # seconds
+    fps: int = 60
+    dpi: int = 200
+    bit_rate: int = 50_000
 
 @dataclass
 class PlotConfig3D():
@@ -81,7 +85,7 @@ class PlotConfig3D():
     draw_dashes3d: bool = True
     # display options:
     display_time: bool = True
-    time_text_pos: Tuple[float, float] = (0.12, 0.85)
+    time_text_pos: Tuple[float, float] = (0.12, 0.88)
     display_legend: bool = False
     display_baryc: bool = True
     baryc_markersize: int = 10

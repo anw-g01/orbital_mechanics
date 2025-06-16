@@ -14,7 +14,7 @@ from typing import Optional, Tuple
 from mpl_toolkits.mplot3d import Axes3D
 # configure matplotlib defaults:
 plt.rcParams.update({
-    "font.size": 11,
+    "font.size": 12,
     "font.family": "Latin Modern Roman",
     "mathtext.fontset": "cm",
     "lines.linewidth": 1,
@@ -40,6 +40,8 @@ class TwoBodySystem:
         self.params = params if params else SystemParams()
         self.config = config if config else PlotConfig()
         self.config_3d = config_3d if config_3d else PlotConfig3D()
+        self.body1_name = self.config.body1_legend_label if self.config.body1_legend_label else "Body1"
+        self.body2_name = self.config.body2_legend_label if self.config.body2_legend_label else "Body2"
         self.t = None
         self.r1 = None    # position vector of body 1 (e.g., Earth)
         self.r2 = None    # position vector of body 2 (e.g., Moon)
@@ -65,6 +67,7 @@ class TwoBodySystem:
         self.used_steps = None      # number of frames to write to MP4
         self.trail_length = None    # trail length of masses in frames
         self.interval = None        # seconds per frame (1000/fps milliseconds)
+        self.file_prefix = None
 
     def inspect_attributes(self) -> None:
         """Inspect and print the attributes of the two-body system."""
@@ -274,17 +277,75 @@ class TwoBodySystem:
         plt.tight_layout(), plt.show()    
         return fig, gs, ax
 
-    def animate2d(
-        self, 
-        show_plot_first: bool = True,
-        fps: int = 60, 
-        bitrate: int = 50_000,
-        dpi: int = 200,
-    ) -> None:
-        """Animate the 2D orbits of the two-body system. Writes to an MP4 file."""
+    def _get_filename(self) -> str:
+        """Generate a filename for animation MP4 files based on system and configuration parameters."""
+        p, cf = self.params, self.config
+        name1, name2 = self.body1_name.lower(), self.body2_name.lower()
+        prefix = f"{self.file_prefix}_" if self.file_prefix else ""
+        return (
+            f"{prefix}"
+            f"{name1}-{name2}_"
+            f"dpi={cf.dpi}_"
+            f"{cf.trail_length_pct:.0f}%trail(factor={cf.trail_length_factor})_"
+            f"{self.steps=:,.0f}_"
+            f"T_days={p.T_days:.1f}_"
+            f"vid_dur={cf.video_duration:.0f}_"
+            f"{cf.to_scale=}"
+            f".mp4"
+        )
 
+    def _animation_params(self, dim: int = None) -> None:
+        """Set animation parameters as attributes based on the configuration."""
         cf = self.config    # shorthand alias for the PlotConfig instance
+
+        # calculate key animation parameters:
+        self.used_steps = int(cf.fps * cf.video_duration)    # number of steps for the animation
+        self.trail_length = int((cf.trail_length_pct / 100) * self.used_steps)    # trail length in frames
+        self.interval = 1000 / cf.fps    # milliseconds per frame 
         
+        # check if the number of steps is sufficient for the video duration:
+        if self.used_steps > self.steps:
+            raise ValueError(f"{self.used_steps:,} frames required for a {cf.video_duration:.1f} sec video at {cf.fps} FPS, but only {self.steps:,.0f} frames ({self.steps / cf.fps:.1f} sec) available. Increase `steps` or reduce `video_duration`.")
+        
+        # print animation parameters and stats:
+        name1, name2 = self.body1_name, self.body2_name
+        print(f"\n# ------- {dim}D Animation of {name1}-{name2} System ------- #")
+        print(f"using {self.used_steps}/{len(self.t)} time steps => {cf.video_duration:.1f} sec video duration")
+        print(f"{self.used_steps:,} frames @ {cf.fps} fps (~{self.interval * 1e-3:.3f} sec/frame), dpi={cf.dpi}")
+        print(f"writing {self.used_steps} frames to MP4...\n")
+
+    def _write_to_mp4(self, ani: FuncAnimation, pbar: tqdmFA) -> None:
+        """Write the animation to an MP4 file using the configured parameters."""
+        cf = self.config    
+        
+        # start animation:
+        writer = FFMpegWriter(fps=cf.fps, bitrate=cf.bit_rate)
+        file_name = self._get_filename()    # generate filename for the animation
+        ani.save(filename=file_name, writer=writer, dpi=cf.dpi)
+        pbar.close()    # close progress bar
+        print(f"\nanimation saved as '{file_name}'")
+
+        # quick report:
+        elapsed = int(pbar.format_dict["elapsed"])
+        time = datetime.timedelta(seconds=elapsed)
+        print(f"\ntotal elapsed time: {time}")
+        avg_iter_per_sec = self.used_steps / time.total_seconds()
+        if 1 / avg_iter_per_sec < 1:
+            avg_rate = f"{1 / avg_iter_per_sec * 1e3:.0f} ms/frame"
+        else:
+            avg_rate = f"{1 / avg_iter_per_sec:.2f} sec/frame"
+        print(f"{avg_iter_per_sec:.1f} frames/sec processed ({avg_rate})")
+
+    def animate2d(self, show_plot_first: bool = True) -> None:
+        """Animate the 2D orbits of the two-body system. Writes to an MP4 file."""
+        cf = self.config
+
+        # show the static complete orbit trails (final positions):
+        if show_plot_first:
+            print(f"\nplotting final positions with complete orbit trails...")
+            print("<CLOSE FIGURE WINDOW TO START ANIMATION WRITING>")
+            self.plot_orbits2d()    # figure window must be closed before continuing     
+
         # set axis limits based on projected coordinates or original 2D coordinates:
         if self.params.head_on_view:
             # use projected coordinates to calculate axis limits:
@@ -293,107 +354,68 @@ class TwoBodySystem:
             # unpack 2D coordinates normally:
             x1, y1, x2, y2 = self.x1, self.y1, self.x2, self.y2  
         
-        # show the static complete orbit trails (final positions):
-        if show_plot_first:
-            print(f"\nplotting final positions with complete orbit trails...")
-            print("<CLOSE FIGURE WINDOW TO START ANIMATION WRITING>")
-            self.plot_orbits2d()    # figure window must be closed before continuing 
+        # set animation parameters and print key stats:
+        self._animation_params(dim=2)
 
-        # key animation statistics
-        trail_length = int((cf.trail_length_pct / 100) * self.steps) 
-        print(f"\n# ---------- 2D ANIMATION ---------- #")
-        # print(f"{self.steps:,} steps @ {fps} fps (~{self.interval * 1e-3:.3f} sec/frame) and {dpi} DPI")
-        duration = self.steps / fps
-        print(f"total video duration: {duration:.2f} sec ({duration / 60:.1f} min)")
-        print(f"writing {self.steps} frames to MP4...\n")
-
-        # ----- FIGURE SETUP ----- #
+        # base 2D figure and axes setup:
         fig = plt.figure(figsize=self.config_3d.figure_size)
         gs = GridSpec(nrows=1, ncols=1, figure=fig)
         ax = self._create_figure2d(fig, gs)
 
-        # --- PLOT ELEMENTS (TO BE UPDATED IN ANIMATION) --- #
+        # initialise plot elements:
         if cf.to_scale:    # show planetary bodies to scale
-            body1_marker = mpatches.Circle((self.x1[0], self.y1[0]), radius=cf.body1_radius, color=cf.body1_colour, label=cf.body1_legend_label, zorder=5)
-            body2_marker = mpatches.Circle((self.x2[0], self.y2[0]), radius=cf.body2_radius, color=cf.body2_colour, label=cf.body2_legend_label, zorder=5)
+            body1_marker = mpatches.Circle((x1[0], y1[0]), radius=cf.body1_radius, color=cf.body1_colour, label=cf.body1_legend_label, zorder=5)
+            body2_marker = mpatches.Circle((x2[0], y2[0]), radius=cf.body2_radius, color=cf.body2_colour, label=cf.body2_legend_label, zorder=5)
             ax.add_patch(body1_marker), ax.add_patch(body2_marker)
         else:
             body1_marker = ax.scatter([], [], color=cf.body1_colour, s=cf.body1_markersize, zorder=5)
             body2_marker = ax.scatter([], [], color=cf.body2_colour, s=cf.body2_markersize, zorder=5)
-        body1_orbit, = ax.plot([], [], color=cf.body1_trail_colour, linewidth=cf.line_width)
-        body2_orbit, = ax.plot([], [], color=cf.body2_trail_colour, linewidth=cf.line_width)
+        body1_trail, = ax.plot([], [], color=cf.body1_trail_colour, linewidth=cf.line_width)
+        body2_trail, = ax.plot([], [], color=cf.body2_trail_colour, linewidth=cf.line_width)
         if cf.display_time:
             t_days = self.t / (24 * 60 * 60)    # convert time to days
             xpos, ypos = cf.time_text_pos
             time_text = ax.text(xpos, ypos, "", transform=ax.transAxes)
 
-        # --- PROGRESS BAR --- #
-        pbar = tqdmFA(total=self.steps, fps=fps)
+        # ----- ANIMATION FUNCTIONS ----- #
 
-        # ----- ANIMATION FUNCTION SETUP ----- #
-        def _init() -> tuple:
-            body1_orbit.set_data([], [])
-            body2_orbit.set_data([], [])
+        def init() -> tuple:
+            body1_trail.set_data([], [])
+            body2_trail.set_data([], [])
             if cf.to_scale:
-                body1_marker.center = (self.x1[0], self.y1[0])
-                body2_marker.center = (self.x2[0], self.y2[0])
+                body1_marker.center = (x1[0], y1[0])
+                body2_marker.center = (x2[0], y2[0])
             else:
-                body1_marker.set_offsets([[self.x1[0], self.y1[0]]])
-                body2_marker.set_offsets([[self.x2[0], self.y2[0]]])
+                body1_marker.set_offsets([[x1[0], y1[0]]])
+                body2_marker.set_offsets([[x2[0], y2[0]]])
             if cf.display_time:
                 time_text.set_text(f"T = {t_days[0]:.1f} days")    # set initial time text
-            return body1_orbit, body2_orbit, body1_marker, body2_marker
+            return body1_trail, body2_trail, body1_marker, body2_marker
 
-        def _update(frame) -> tuple:
+        def update(frame) -> tuple:
             # update orbit trails:
-            i0 = max(0, frame - trail_length)    # start index for the trail
-            i0_1 = max(0, frame - int(trail_length * cf.trail_length_factor))      # longer trail for body 1
-            body1_orbit.set_data(self.x1[i0_1: frame + 1], self.y1[i0_1: frame + 1])      # update orbit trail
-            body2_orbit.set_data(self.x2[i0: frame + 1], self.y2[i0: frame + 1])
+            i0 = max(0, frame - self.trail_length)    # start index for the trail
+            i0_1 = max(0, frame - int(self.trail_length * cf.trail_length_factor))      # longer trail for body 1
+            body1_trail.set_data(x1[i0_1: frame + 1], y1[i0_1: frame + 1])      # update orbit trail
+            body2_trail.set_data(x2[i0: frame + 1], y2[i0: frame + 1])
             # update markers:
             if cf.to_scale:
-                body1_marker.center = (self.x1[frame], self.y1[frame])    # update matplotlib.patches.Circle position
-                body2_marker.center = (self.x2[frame], self.y2[frame])
+                body1_marker.center = (x1[frame], y1[frame])    # update matplotlib.patches.Circle position
+                body2_marker.center = (x2[frame], y2[frame])
             else:
-                body1_marker.set_offsets([[self.x1[frame], self.y1[frame]]])    # update scatter marker position
-                body2_marker.set_offsets([[self.x2[frame], self.y2[frame]]])
+                body1_marker.set_offsets([[x1[frame], y1[frame]]])    # update scatter marker position
+                body2_marker.set_offsets([[x2[frame], y2[frame]]])
             # update current time step text display if toggled:
             if cf.display_time:
                 time_text.set_text(f"T = {t_days[frame]:.{cf.time_dp}f} days")
             pbar.update(1)    # update tqdm progress bar
-            return body1_orbit, body2_orbit, body1_marker, body2_marker
+            return body1_trail, body2_trail, body1_marker, body2_marker
 
-        # --- WRITE AND SAVE TO FILE --- #
-        ani = FuncAnimation(fig, _update, frames=range(self.steps), init_func=_init, blit=True)
-        writer = FFMpegWriter(fps=fps, bitrate=bitrate)
-        # generate a file name:
-        name1, name2 = cf.body1_legend_label, cf.body2_legend_label
-        if not name1 or not name2:
-            name1, name2 = "body1", "body2"
-        time_period = self.params.T_days
-        file_name = (
-            f"2D_{name1.lower()}-{name2.lower()}_"
-            f"{dpi=}_"
-            f"{cf.trail_length_pct:.0f}%trail(factor={cf.trail_length_factor})_"
-            f"{self.steps=:,.0f}_"
-            f"T_days={time_period:.1f}_"
-            f"{cf.to_scale=}_"
-            f".mp4"
-        )
-        ani.save(filename=file_name, writer=writer, dpi=dpi)
-        pbar.close()    # close progress bar
-        print(f"\nanimation saved as '{file_name}'")
-
-        # --- QUICK FRAME WRITING REPORT --- #
-        elapsed = int(pbar.format_dict["elapsed"])
-        t_elapsed = datetime.timedelta(seconds=elapsed)
-        print(f"\ntotal elapsed time: {t_elapsed}")
-        avg_iter_per_sec = self.steps / t_elapsed.total_seconds()
-        if 1 / avg_iter_per_sec < 1:
-            avg_rate = f"{1 / avg_iter_per_sec * 1e3:.0f} ms/frame"
-        else:
-            avg_rate = f"{1 / avg_iter_per_sec:.2f} sec/frame"
-        print(f"{avg_iter_per_sec:.1f} frames/sec processed ({avg_rate})")   
+        # create and save animation MP4 file:
+        pbar = tqdmFA(total=self.steps, fps=cf.fps)    # initialise custom tqdm progress bar
+        ani = FuncAnimation(fig, update, frames=range(self.used_steps), init_func=init, blit=True)
+        self.file_prefix = "2D"    # prefix for the filename
+        self._write_to_mp4(ani, pbar)    # write the animation to an MP4 file
 
     def _create_figure3d(self, fig: plt.Figure, gs: GridSpec) -> plt.Axes:
         """Helper function to populate the base figure and axes used for plotting orbits in 3D."""
@@ -506,36 +528,25 @@ class TwoBodySystem:
 
         return fig, (ax_3d, ax_2d)
 
-    def animate3d(
-        self, 
-        show_plot_first: bool = True,
-        fps: int = 60, 
-        dpi: int = 200, 
-        bitrate: int = 50_000,
-    ) -> None:
+    def animate3d(self, show_plot_first: bool = True) -> None:
         """Animate the 3D orbits of the two-body system. Writes to an MP4 file."""
-        
         cf, cf_3d = self.config, self.config_3d    # shorthand alias for the PlotConfig instance
 
-        # show the static complete orbit trails (final positions) first:
+        # show the static complete orbit trails (final positions):
         if show_plot_first:
             print(f"\nplotting final positions with complete orbit trails...")
             print("<CLOSE FIGURE WINDOW TO START ANIMATION WRITING>")
             self.plot_orbits3d()    # figure window must be closed before continuing 
 
-        # key animation statistics
-        print(f"\n# ---------- 3D ANIMATION ---------- #")
-        print(f"{self.steps:,} steps @ {fps} fps (~{self.interval * 1e-3:.3f} sec/frame), {dpi=}")
-        duration = self.steps / fps
-        print(f"total video duration: {duration:.2f} sec ({duration / 60:.1f} min)")
-        print(f"writing {self.steps} frames to MP4...\n")
+        # set animation parameters and print key stats:
+        self._animation_params(dim=3)
 
-        # ----- BASE 3D FIGURE SETUP ----- #
+        # base 2D figure and axes setup:
         fig = plt.figure(figsize=self.config_3d.figure_size)
         gs = GridSpec(nrows=1, ncols=1, figure=fig)
         ax = self._create_figure3d(fig, gs)
 
-        # --- PLOT ELEMENTS (TO BE UPDATED IN ANIMATION) --- #
+        # initialise plot elements:
         if cf_3d.markers_to_relative_scale:    # show planetary bodies to scale
             # relative scale of marker2 size based on defined marker1 size
             size2 = cf_3d.body1_markersize * (cf.body2_radius / cf.body1_radius) ** 2    # scale by the square of the radius ratio
@@ -550,23 +561,22 @@ class TwoBodySystem:
             xpos, ypos = cf_3d.time_text_pos
             time_text = ax.text2D(xpos, ypos, "", transform=ax.transAxes)
 
-        # --- PROGRESS BAR --- #
-        pbar = tqdmFA(total=self.steps, fps=fps)
 
-        # ----- ANIMATION FUNCTION SETUP ----- #
-        def _init() -> tuple:
+        # ----- ANIMATION FUNCTIONS ----- #
+
+        def init() -> tuple:
             body1_orbit.set_data([], []), body2_orbit.set_data([], [])
             body1_marker._offsets3d = ([self.x1[0]], [self.y1[0]], [self.z1[0]])
             body2_marker._offsets3d = ([self.x2[0]], [self.y2[0]], [self.z2[0]])
             if cf_3d.display_time:
-                time_text.set_text(f"T = {t_days[0]:.{cf.time_dp}f} days")            # set initial time text
-            ax.view_init(elev=cf_3d.elev_start, azim=cf_3d.azim_start)      # set initial camera angles
+                time_text.set_text(f"T = {t_days[0]:.{cf.time_dp}f} days")    # set initial time text
+            ax.view_init(elev=cf_3d.elev_start, azim=cf_3d.azim_start)    # set initial camera angles
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
-        def _update(frame) -> tuple:
+        def update(frame) -> tuple:
             # update orbit trails:
-            i0 = max(0, frame - self.trail_length)                                       # start index for the trail
-            i0_1 = max(0, frame - int(self.trail_length * cf.trail_length_factor))       # longer trail for body 1
+            i0 = max(0, frame - self.trail_length)    # start index for the trail
+            i0_1 = max(0, frame - int(self.trail_length * cf.trail_length_factor))    # longer trail for body 1
             body1_orbit.set_data_3d(self.x1[i0_1:frame + 1], self.y1[i0_1:frame + 1], self.z1[i0_1:frame + 1])    # update orbit trail
             body2_orbit.set_data_3d(self.x2[i0:frame + 1], self.y2[i0:frame + 1], self.z2[i0:frame + 1])
             # update markers:
@@ -586,39 +596,11 @@ class TwoBodySystem:
             pbar.update(1)
             return body1_orbit, body2_orbit, body1_marker, body2_marker
 
-        # --- WRITE AND SAVE TO FILE --- #
-        ani = FuncAnimation(fig, _update, frames=range(self.steps), init_func=_init, blit=True)
-        writer = FFMpegWriter(fps=fps, bitrate=bitrate)
-        # generate a file name:
-        name1, name2 = cf.body1_legend_label, cf.body2_legend_label
-        if not name1 or not name2:
-            name1, name2 = "body1", "body2"
-        time_period = self.params.T_days
-        file_name = (
-            f"3D_{name1.lower()}-{name2.lower()}_"
-            f"{dpi=}_"
-            f"(e0={cf_3d.elev_start},a0={cf_3d.azim_start})to"
-            f"(ef={cf_3d.elev_end},af={cf_3d.azim_end})_"
-            f"{cf.trail_length_pct:.0f}%trail(factor={cf.trail_length_factor})_"
-            f"{self.steps=:,.0f}_"
-            f"T_days={time_period:.1f}_"
-            f"to_scale={cf_3d.markers_to_relative_scale}_"
-            f".mp4"
-        )
-        ani.save(filename=file_name, writer=writer, dpi=dpi)
-        pbar.close()    # close progress bar
-        print(f"\nanimation saved as '{file_name}'")
-
-        # --- QUICK FRAME WRITING REPORT --- #
-        elapsed = int(pbar.format_dict["elapsed"])
-        t_elapsed = datetime.timedelta(seconds=elapsed)
-        print(f"\ntotal elapsed time: {t_elapsed}")
-        avg_iter_per_sec = self.steps / t_elapsed.total_seconds()
-        if 1 / avg_iter_per_sec < 1:
-            avg_rate = f"{1 / avg_iter_per_sec * 1e3:.0f} ms/frame"
-        else:
-            avg_rate = f"{1 / avg_iter_per_sec:.2f} sec/frame"
-        print(f"{avg_iter_per_sec:.1f} frames/sec processed ({avg_rate})") 
+        # create and save animation MP4 file:
+        pbar = tqdmFA(total=self.steps, fps=cf.fps)    # initialise custom tqdm progress bar
+        ani = FuncAnimation(fig, update, frames=range(self.used_steps), init_func=init, blit=True)
+        self.file_prefix = "3D"    # prefix for the filename
+        self._write_to_mp4(ani, pbar)    # write the animation to an MP4 file
 
 
 def pluto_charon_system() -> None:
@@ -632,9 +614,11 @@ def pluto_charon_system() -> None:
             i_deg=360 - i_CHARON,
             head_on_view=True,      # head-on view for 2D plot (project to orbital plane)
             rotate_proj_90cw=True,  # rotate 2D projection 90 degrees (matches 3D  alignment)
+            ode_method="RK45",      # use a high-order ODE solver for better accuracy
+            rtol=1e-12, 
+            atol=1e-9, 
             T_days=T_PLUTO_CHARON * 1.166 * 4,
-            rtol=1e-12, atol=1e-9, steps=600,
-            ode_method="RK45",    # use a high-order ODE solver for better accuracy
+            steps=600,
         ),
         config=PlotConfig(
             body1_radius=R_PLUTO, 
@@ -647,13 +631,15 @@ def pluto_charon_system() -> None:
             body1_trail_colour="tab:brown",
             body2_colour="tab:olive", 
             body2_trail_colour="tab:olive",
-            baryc_colour="tab:blue",    # barycentre colour
+            baryc_colour="tab:blue", 
             display_baryc=True,
             max_axis_extent2d=1.1,
             trail_length_pct=6,
             trail_length_factor=2.5,
             display_legend=True, 
             to_scale=True, 
+            # MP4 animation parameters:
+            dpi=100,        
         )
     )
     # setup 3D plot configuration dataclass:
@@ -664,22 +650,17 @@ def pluto_charon_system() -> None:
         elev_start=20, azim_start=-75,
         camera_pan=True,
         elev_end=10, azim_end=-20,
-        # -- title and legend -- #
         # figure_title="3D Pluto-Charon System",
         figure_size=(10, 10),
         display_legend=False
     )
 
-    # plot only the complete orbits in 2D and 3D:
-    # pluto_charon.plot_orbits2d()        # 2D
-    # pluto_charon.plot_orbits3d()        # 3D
-
     # plot both 2D and 3D orbits side by side:
     pluto_charon.plot_orbits()    
 
     # create 2D and 3D animations:
-    # pluto_charon.animate2d(dpi=250, show_plot_first=False)     # 2D
-    # pluto_charon.animate3d(dpi=250, show_plot_first=False)     # 3D
+    pluto_charon.animate2d(show_plot_first=False)     # 2D
+    pluto_charon.animate3d(show_plot_first=False)     # 3D
 
 
 def earth_moon_system(exaggerated: bool = False) -> None:
@@ -720,12 +701,10 @@ def earth_moon_system(exaggerated: bool = False) -> None:
             display_baryc=False,    # no barycentre marker in 3D
         )
 
-        earth_moon.plot_orbits2d()        # plot only the complete orbits in 2D
-        earth_moon.plot_orbits3d()        # plot only the complete orbits in 3D
+        earth_moon.plot_orbits()    # plot both 2D and 3D orbits side by side
 
-        earth_moon.animate2d(dpi=250, show_plot_first=False)    # create animation with 2D figure
-        earth_moon.animate3d(dpi=250, show_plot_first=False)    # create animation with 3D figure
-
+        earth_moon.animate2d(show_plot_first=False)    # create animation with 2D figure
+        earth_moon.animate3d(show_plot_first=False)    # create animation with 3D figure
     else:
         earth_moon = TwoBodySystem(
             params=SystemParams(
@@ -752,7 +731,7 @@ def earth_moon_system(exaggerated: bool = False) -> None:
 
             )
         )
-        earth_moon.animate2d(dpi=200)    # create animation with 2D figure
+        earth_moon.animate2d()    # create animation with 2D figure
 
 
 def equal_mass_system() -> None:
@@ -771,12 +750,19 @@ def equal_mass_system() -> None:
         ),
         config=PlotConfig(
             time_text_pos=(0.05, 0.93),    # position in axes coordinates (0, 0) bottom left, (1, 1) top right
-            body1_radius=radius * 1.5, body2_radius=radius * 1.5,
-            body1_colour="tab:red", body1_trail_colour="tab:red",
-            body2_colour="tab:green", body2_trail_colour="tab:green",
-            figure_size=(10, 10), max_axis_extent2d=1.1, y_axis_limits=(-2.5e8, 2.5e8),
-            to_scale=True, display_legend=False,
-            display_baryc=True, baryc_colour="tab:blue",          
+            body1_radius=radius * 1.5, 
+            body2_radius=radius * 1.5,
+            body1_colour="tab:red", 
+            body1_trail_colour="tab:red",
+            body2_colour="tab:green", 
+            body2_trail_colour="tab:green",
+            figure_size=(10, 10), 
+            max_axis_extent2d=1.1, 
+            y_axis_limits=(-4e8, 4e8),
+            to_scale=True, 
+            display_legend=False,
+            display_baryc=True, 
+            baryc_colour="tab:blue",          
             trail_length_pct=8, 
             trail_length_factor=1,
             time_dp=0,    # no decimal places for time text
@@ -785,7 +771,7 @@ def equal_mass_system() -> None:
     # setup 3D plot configuration dataclass:
     equal_mass.config_3d = PlotConfig3D(
         markers_to_relative_scale=True,         # not recommened to use spheres for drawing (set False)
-        body1_markersize=200,                   # size of body2 is scaled if markers_to_relative_scale=True
+        body1_markersize=150,                   # size of body2 is scaled if markers_to_relative_scale=True
         max_axis_extent3d=1,
         # camera panning during animation:
         elev_start=20, azim_start=-30,
@@ -796,10 +782,9 @@ def equal_mass_system() -> None:
         display_legend=False,
     )
 
-    # plot only the complete orbits in 2D and 3D:
-    equal_mass.plot_orbits2d()        # 2D
-    equal_mass.plot_orbits3d()        # 3D
+
+    equal_mass.plot_orbits()    # plot both 2D and 3D orbits side by side
 
     # create 2D and 3D animations:
-    equal_mass.animate2d(dpi=250, show_plot_first=False)    # create animation with 2D figure
-    equal_mass.animate3d(dpi=250, show_plot_first=False)    # create animation with 3D figure
+    equal_mass.animate2d(show_plot_first=False)    # create animation with 2D figure
+    equal_mass.animate3d(show_plot_first=False)    # create animation with 3D figure
