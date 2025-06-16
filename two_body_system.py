@@ -11,7 +11,7 @@ from constants import *
 from tqdm_pbar import tqdmFA
 from config import SystemParams, PlotConfig, PlotConfig3D
 from typing import Optional, Tuple
-from mpl_toolkits.mplot3d import Axes3D
+from ode_systems import two_body_ode
 # configure matplotlib defaults:
 plt.rcParams.update({
     "font.size": 12,
@@ -80,35 +80,15 @@ class TwoBodySystem:
 
     def _solve(self) -> None:
         """Numerically solve the ODEs for the two-body system using the provided parameters."""
-        p = self.params    # shorthand alias for the SystemParams instance
-        
-        # extract system parameters from the dataclass:
-        m1, m2, d, v0 = p.m1, p.m2, p.d, p.v0
-        i_deg, T_days, steps = p.i_deg, p.T_days, p.steps
-        ode_method, rtol, atol = p.ode_method, p.rtol, p.atol
-        
-        # initial position vectors of mass 1 and mass 2:
-        i_rad = np.radians(i_deg)   # convert inclination angle to radians
-        r2_0 = np.array([d * np.cos(i_rad), 0.0, d * np.sin(i_rad)])      
-        r1_0 = -m2/m1 * r2_0        # position vector of Earth (with barycentre at origin)                                     
-        
-        # initial velocity vectors:
-        v0 = np.array([0.0, v0, 0])
-        v1_0 = -m2/(m1 + m2) * v0
-        v2_0 = m1/(m1 + m2) * v0
-        
-        # initial state vector, [r_e, v_e, r_m, v_m]:
-        Z0 = np.concatenate([r1_0, v1_0, r2_0, v2_0])
 
-        def _func(t: np.ndarray, Z: np.ndarray) -> np.ndarray:
-            """Computes the time derivative of the state vector."""
-            r1, v1, r2, v2 = np.split(Z, 4)             # unpack state vector (4 equal sub-arrays)
-            r = r2 - r1                                 # relative position vector of Moon w.r.t. Earth
-            r_mag = np.linalg.norm(r)                   # magnitude (Earth-Moon distance)
-            F = ( G*m1*m2 / r_mag**3 ) * r              # force vector (Newton's law of gravitation)
-            a1 = F / m1                                 # acceleration of Earth
-            a2 = -F / m2                                # acceleration of Moon (equal and opposite)
-            return np.concatenate([v1, a1, v2, a2])     # return the time derivative of the state vector
+        # get the ODE system function f(t, Z):
+        func, Z0 = two_body_ode(self.params)
+
+        # extract system parameters from the dataclass:
+        p = self.params
+        m1, m2, d = p.m1, p.m2, p.d
+        T_days, steps = p.T_days, p.steps
+        ode_method, rtol, atol = p.ode_method, p.rtol, p.atol
         
         # ----- EVALUATION & SOLVE ----- #
         orbital_period = 2 * np.pi * np.sqrt(d**3 / (G * (m1 + m2)))    # orbital period of the Earth-Moon system
@@ -120,9 +100,9 @@ class TwoBodySystem:
         print(f"\nrunning ODE solver ({ode_method=})...")
         print(f"using {rtol=:.0e}, {atol=:.0e} (default: rtol=1e-3, atol=1e-6)")
         print(f"t_eval=({t_eval[0]:.0f}, {t_eval[-1]:,.0f}), {steps=:,}, dt≈{dt:.2f}")
-        sol = solve_ivp(_func, t_span, Z0, t_eval=t_eval, method=ode_method, rtol=rtol, atol=atol)
+        sol = solve_ivp(func, t_span, Z0, t_eval=t_eval, method=ode_method, rtol=rtol, atol=atol)
         
-        # ----- EXTRACT RESULTS ----- #
+        # ----- EXTRACT OUTPUTS ----- #
         t, Z = sol.t, sol.y    # unpack time and state vector from the solution
         print(f"\nsolver success: {sol.success} ({sol.nfev:,} nfev)")
         print(f"t.shape: {t.shape}, Z.shape: {Z.shape}")
