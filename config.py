@@ -53,6 +53,8 @@ class PlotConfig:
     time_text_pos: Tuple[float, float] = (0.05, 0.93)
     time_dp: int = 1
     display_legend: bool = False
+    legend_fontsize: int = 11
+    legend_markerscale: float = 1
     display_baryc: bool = False
     baryc_colour: str = "tab:red"
     baryc_legend_label: str = "Barycentre"
@@ -64,11 +66,16 @@ class PlotConfig:
     body1_legend_label: Optional[str] = None
     body2_radius: float = R_MOON
     body2_legend_label: Optional[str] = None
+    # dashboard (2D + 3D plot) properties:
+    left_2d: bool = True        # True: 2D plot on the left (3D on the right), False: 2D plot on the right
+    width_ratio: float = 1.3    # width ratio of the 3D plot in the dashboard
+    wspace: float = 0.1         # space between the 2D and 3D plots in the dashboard
     # MP4 video parameters:
     video_duration: int = 10    # seconds
     fps: int = 60
-    dpi: int = 200
+    dpi: int = 250
     bit_rate: int = 50_000
+
 
 @dataclass
 class PlotConfig3D():
@@ -85,7 +92,7 @@ class PlotConfig3D():
     draw_dashes3d: bool = True
     # display options:
     display_time: bool = True
-    time_text_pos: Tuple[float, float] = (0.12, 0.88)
+    time_text_pos: Tuple[float, float] = (0.12, 0.85)
     display_legend: bool = False
     display_baryc: bool = True
     baryc_markersize: int = 10
